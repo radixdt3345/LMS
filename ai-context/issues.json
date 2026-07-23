@@ -274,8 +274,8 @@
       "epic": "EPIC-06",
       "layer": "DB",
       "title": "Create leave_types table migration",
-      "description": "EF migration: `leave_types` (id UUID PK, name varchar(100) unique, max_days_per_year int nullable, carry_forward bool, accrual_type enum(Annual/OneTime/Unlimited), requires_document bool, is_active bool, created_at UTC). FRs: FR-27 to FR-30. Tests: IT-16.",
-      "acceptance_criteria": ["Migration clean", "name unique constraint", "accrual_type stored as int enum"],
+      "description": "EF migration: `leave_types` (id UUID PK, name varchar(100) unique, max_days_per_year int nullable, accrual_type enum(Annual/OneTime/Unlimited — no monthly/quarterly, no carry-forward per org policy), requires_document bool, is_active bool, created_at UTC). FRs: FR-27 to FR-30. Tests: IT-16.",
+      "acceptance_criteria": ["Migration clean", "name unique constraint", "accrual_type stored as int enum", "NO carry_forward column — org policy prohibits carry-forward"],
       "depends_on": ["INFRA-DB-001"],
       "wave": 1
     },
@@ -364,7 +364,7 @@
       "epic": "EPIC-07",
       "layer": "TEST",
       "title": "Unit tests: LeaveBalanceService edge cases (UT-22 to UT-31)",
-      "description": "UT-22: CreditAnnual allocates correct days. UT-23: DeductBalance reduces used_days. UT-24: RestoreBalance increases remaining. UT-25: ProrateForNewJoiner mid-year formula. UT-26: Unpaid Leave zero balance does not block. UT-27: carry-forward cap. UT-28: YearEndLapse zeroes non-carry types. UT-29: NewYearCredit creates new year row. UT-30: CompOffExpiry marks expired. UT-31: balance cannot go negative. xUnit, Moq. Tests: UT-22 to UT-31.",
+      "description": "UT-22: CreditAnnual allocates correct days. UT-23: DeductBalance reduces used_days. UT-24: RestoreBalance increases remaining. UT-25: ProrateForNewJoiner mid-year formula. UT-26: Unpaid Leave zero balance does not block. UT-27: ProrateEntitlementAsync — mid-year joiner (July 1) with 12 annual days returns 6.0 days. UT-28: YearEndLapse zeroes non-carry types. UT-29: NewYearCredit creates new year row. UT-30: CompOffExpiry marks expired. UT-31: balance cannot go negative. xUnit, Moq. Tests: UT-22 to UT-31.",
       "acceptance_criteria": ["All 10 unit tests pass, Category=Unit"],
       "depends_on": ["LEAVECORE-INT-002"],
       "wave": 1
