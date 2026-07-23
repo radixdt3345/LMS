@@ -1,0 +1,793 @@
+{
+  "generated": "2026-07-23T00:00:00Z",
+  "project": "lms-v5",
+  "total_issues": 83,
+  "epics": [
+    { "id": "EPIC-01", "feature": "F-01", "title": "User Authentication", "wave": 1, "domain": "AUTH" },
+    { "id": "EPIC-02", "feature": "F-02", "title": "Account Lockout Management", "wave": 1, "domain": "AUTH" },
+    { "id": "EPIC-03", "feature": "F-03", "title": "Initial Data Seeding", "wave": 1, "domain": "INFRA" },
+    { "id": "EPIC-04", "feature": "F-04", "title": "Department Management", "wave": 1, "domain": "PEOPLE" },
+    { "id": "EPIC-05", "feature": "F-05", "title": "Employee Management", "wave": 1, "domain": "PEOPLE" },
+    { "id": "EPIC-06", "feature": "F-06", "title": "Leave Types and Policies", "wave": 1, "domain": "LEAVECORE" },
+    { "id": "EPIC-07", "feature": "F-07", "title": "Leave Balance Management", "wave": 1, "domain": "LEAVECORE" },
+    { "id": "EPIC-08", "feature": "F-08", "title": "Public Holiday Calendar", "wave": 1, "domain": "LEAVECORE" },
+    { "id": "EPIC-09", "feature": "F-09", "title": "Leave Request Workflow", "wave": 2, "domain": "LEAVECORE" },
+    { "id": "EPIC-10", "feature": "F-10", "title": "Comp-Off Request Workflow", "wave": 2, "domain": "COMPOFF" },
+    { "id": "EPIC-11", "feature": "F-11", "title": "Approval Engine", "wave": 2, "domain": "LEAVECORE" },
+    { "id": "EPIC-12", "feature": "F-12", "title": "Notifications", "wave": 2, "domain": "NOTIFICATIONS" },
+    { "id": "EPIC-13", "feature": "F-13", "title": "Dashboards and Reporting", "wave": 3, "domain": "REPORTING" },
+    { "id": "EPIC-14", "feature": "F-14", "title": "Audit Trail", "wave": 2, "domain": "REPORTING" }
+  ],
+  "issues": [
+    {
+      "id": "AUTH-DB-001",
+      "epic": "EPIC-01",
+      "layer": "DB",
+      "title": "Create users and refresh_tokens tables with auth columns",
+      "description": "Create EF Core migrations for `users` table (id UUID PK, email, password_hash, azure_ad_oid, role, department_id FK, is_active, failed_login_count, lockout_until, created_at UTC, updated_at UTC) and `refresh_tokens` table (id UUID PK, user_id FK, token_hash, expires_at UTC, revoked_at UTC). Apply snake_case naming convention. Add indexes on users.email and users.azure_ad_oid. Seed no rows here (see INFRA-DB-001). FRs: FR-1 to FR-11. Tests: UT-1 to UT-10, IT-1.",
+      "acceptance_criteria": ["Migration runs idempotently", "users.email has unique index", "refresh_tokens has FK constraint to users with cascade delete", "All timestamps stored as UTC timestamptz"],
+      "depends_on": [],
+      "wave": 1
+    },
+    {
+      "id": "AUTH-API-001",
+      "epic": "EPIC-01",
+      "layer": "API",
+      "title": "Implement local login endpoint (POST /api/v1/auth/login)",
+      "description": "AuthService.LoginAsync — validate email/password, check lockout, increment failed_login_count on failure, reset on success, issue JWT + refresh token. JWT payload: user_id, role, department_id, exp. Returns 200 {success,data:{access_token,refresh_token,expires_in}} or 401/423. Rate-limit: 10 req/min per IP. FRs: FR-3, FR-4, FR-7. Tests: UT-1 to UT-5, IT-2.",
+      "acceptance_criteria": ["Returns 423 when lockout_until > now", "Failed attempts increment counter", "Successful login resets counter", "Refresh token stored hashed"],
+      "depends_on": ["AUTH-DB-001"],
+      "wave": 1
+    },
+    {
+      "id": "AUTH-API-002",
+      "epic": "EPIC-01",
+      "layer": "API",
+      "title": "Implement Azure AD SSO callback (GET /api/v1/auth/sso/callback)",
+      "description": "AuthService.SsoCallbackAsync — receive MSAL auth code, exchange for ID token via MSAL, upsert user from azure_ad_oid + email claims, issue JWT + refresh token. If user not found by OID, create with role=Employee. FRs: FR-1, FR-2. Tests: UT-6, IT-3.",
+      "acceptance_criteria": ["OID-first lookup before email", "New users auto-created with Employee role", "Returns same token envelope as local login"],
+      "depends_on": ["AUTH-DB-001"],
+      "wave": 1
+    },
+    {
+      "id": "AUTH-API-003",
+      "epic": "EPIC-01",
+      "layer": "API",
+      "title": "Implement token refresh and logout endpoints",
+      "description": "POST /api/v1/auth/refresh — TokenService.IssueAccessToken from valid refresh token, rotate refresh token (revoke old, issue new). POST /api/v1/auth/logout — revoke refresh token. GET /api/v1/auth/me — return current user profile from JWT. FRs: FR-5, FR-6, FR-11. Tests: UT-7 to UT-10, IT-4, IT-5.",
+      "acceptance_criteria": ["Refresh rotates token (old revoked)", "Logout marks refresh token revoked", "Expired refresh token returns 401"],
+      "depends_on": ["AUTH-API-001"],
+      "wave": 1
+    },
+    {
+      "id": "AUTH-UI-001",
+      "epic": "EPIC-01",
+      "layer": "UI",
+      "title": "Build Login page and auth flow (React + MSAL)",
+      "description": "Login page at /login: email+password form (React Hook Form, FluentValidation-derived error display), 'Sign in with Microsoft' button (MSAL React useMsal), axios interceptor for JWT Bearer header, token refresh on 401 (silent retry once). Store tokens in memory (not localStorage). ProtectedRoute HOC redirects unauthenticated to /login. FRs: FR-1 to FR-6. Tests: UT-60, E2E-1, E2E-2.",
+      "acceptance_criteria": ["Tokens never written to localStorage", "401 triggers silent refresh, then retry", "SSO redirect handled, user lands on dashboard", "ProtectedRoute redirects unauthenticated users"],
+      "depends_on": ["AUTH-API-001", "AUTH-API-002", "AUTH-API-003"],
+      "wave": 1
+    },
+    {
+      "id": "AUTH-INT-001",
+      "epic": "EPIC-01",
+      "layer": "INT",
+      "title": "Wire JWT middleware, CORS, rate-limiting in Program.cs",
+      "description": "Register JWT Bearer middleware with signing key from env. Configure CORS for frontend origin. Add rate-limiting middleware (10 req/min on /auth/login per IP using ASP.NET Core rate limiting). Wire MSAL config (TenantId, ClientId from env). Register AuthService, TokenService, AccountService in DI. FRs: FR-1 to FR-11. Tests: IT-6.",
+      "acceptance_criteria": ["Requests without valid JWT return 401", "CORS blocks unlisted origins", "Rate limit returns 429 after threshold", "MSAL config loaded from environment"],
+      "depends_on": ["AUTH-API-001", "AUTH-API-002", "AUTH-API-003"],
+      "wave": 1
+    },
+    {
+      "id": "AUTH-TEST-001",
+      "epic": "EPIC-01",
+      "layer": "TEST",
+      "title": "Integration tests for Auth domain (IT-1 to IT-6)",
+      "description": "Write xUnit integration tests using real PostgreSQL (lms_test DB). IT-1: DB schema verified. IT-2: login happy path. IT-3: SSO upsert. IT-4: token refresh rotation. IT-5: logout revokes token. IT-6: rate limit enforced. All tests use TestcontainerPostgresFixture or native lms_test DB. Category=Integration. Tests: IT-1 to IT-6.",
+      "acceptance_criteria": ["All 6 IT- pass against real PostgreSQL", "Tests clean up state after each run", "Category tag applied for filter"],
+      "depends_on": ["AUTH-INT-001"],
+      "wave": 1
+    },
+    {
+      "id": "AUTH-E2E-001",
+      "epic": "EPIC-01",
+      "layer": "E2E",
+      "title": "E2E: Local login to Employee Dashboard (E2E-1) and SSO login (E2E-2)",
+      "description": "Playwright tests. E2E-1 (@smoke): navigate /login, fill email+password, click Sign In, assert /dashboard visible, assert user name in header. E2E-2: click 'Sign in with Microsoft', mock MSAL redirect, assert dashboard. Environment: staging. Trigger: workflow_dispatch only. Tests: E2E-1, E2E-2.",
+      "acceptance_criteria": ["E2E-1 tagged @smoke completes in < 60s", "E2E-2 covers SSO flow"],
+      "depends_on": ["AUTH-UI-001", "AUTH-INT-001"],
+      "wave": 1
+    },
+    {
+      "id": "AUTH-API-004",
+      "epic": "EPIC-02",
+      "layer": "API",
+      "title": "Implement account lockout and unlock endpoints",
+      "description": "AccountService.LockAccount (auto on 5 failed attempts — 30 min lockout), AccountService.UnlockAccount (HR Admin/Super Admin only — POST /api/v1/admin/users/{id}/unlock), AccountService.GetLockedAccounts (GET /api/v1/admin/users/locked). FRs: FR-7, FR-8. Tests: UT-11, UT-12, IT-7.",
+      "acceptance_criteria": ["5th failed attempt sets lockout_until = now + 30min", "Unlock clears lockout and resets counter", "GetLockedAccounts returns only locked users", "403 for non-HR-Admin/Super-Admin callers"],
+      "depends_on": ["AUTH-API-001"],
+      "wave": 1
+    },
+    {
+      "id": "AUTH-UI-002",
+      "epic": "EPIC-02",
+      "layer": "UI",
+      "title": "Build Locked Accounts management page (HR Admin)",
+      "description": "Page at /admin/users/locked (HR Admin + Super Admin only, RoleProtectedRoute). Table of locked users: name, email, locked_since, failed_attempts. Unlock button per row — POST to unlock endpoint, optimistic update. FRs: FR-8. Tests: UT-61, E2E-3.",
+      "acceptance_criteria": ["Page invisible to Employee/Manager roles", "Unlock triggers API call and removes row from table", "Empty state shown when no locked accounts"],
+      "depends_on": ["AUTH-API-004"],
+      "wave": 1
+    },
+    {
+      "id": "AUTH-INT-002",
+      "epic": "EPIC-02",
+      "layer": "INT",
+      "title": "Integration test: lockout auto-trigger and unlock flow (IT-7, IT-8)",
+      "description": "IT-7: POST /auth/login with wrong password 5 times, assert 423 on 6th attempt, assert lockout_until set. IT-8: HR Admin calls unlock, assert lockout cleared, assert subsequent login succeeds. Tests: IT-7, IT-8.",
+      "acceptance_criteria": ["Lockout triggers on exactly 5th failure", "Unlock allows immediate login"],
+      "depends_on": ["AUTH-API-004", "AUTH-UI-002"],
+      "wave": 1
+    },
+    {
+      "id": "AUTH-TEST-002",
+      "epic": "EPIC-02",
+      "layer": "TEST",
+      "title": "E2E: Locked account UI flow (E2E-3)",
+      "description": "Playwright: login as HR Admin, navigate /admin/users/locked, assert table visible, click Unlock on first row, assert row disappears. Tests: E2E-3.",
+      "acceptance_criteria": ["E2E-3 passes on staging"],
+      "depends_on": ["AUTH-INT-002"],
+      "wave": 1
+    },
+    {
+      "id": "INFRA-DB-001",
+      "epic": "EPIC-03",
+      "layer": "DB",
+      "title": "Implement idempotent data seeder (SeedService)",
+      "description": "SeedService runs on app startup (IHostedService or EF HasData). Seeds: 1 SuperAdmin user (email from env SEED_SUPER_ADMIN_EMAIL), 1 HR Admin user (email from env SEED_HR_ADMIN_EMAIL), 1 department 'HR', 5 leave types (Annual Leave 18d/yr accrual, Sick Leave 10d/yr no-carry, Casual Leave 7d/yr, Unpaid Leave unlimited, Maternity/Paternity 90d one-time). Idempotent: skip if exists. FRs: FR-28, FR-82 to FR-84. Tests: UT-13, IT-45, IT-46.",
+      "acceptance_criteria": ["Running seeder twice produces no duplicates", "Seeded users have hashed passwords (if local) or OID placeholder", "All 5 leave types created with correct accrual rules", "SuperAdmin and HR Admin can login after seed"],
+      "depends_on": [],
+      "wave": 1
+    },
+    {
+      "id": "INFRA-TEST-001",
+      "epic": "EPIC-03",
+      "layer": "TEST",
+      "title": "Integration tests for seeder (IT-45, IT-46)",
+      "description": "IT-45: run seeder on empty DB, assert all expected rows present. IT-46: run seeder twice, assert no duplicate rows. Tests: IT-45, IT-46.",
+      "acceptance_criteria": ["Both tests pass"],
+      "depends_on": ["INFRA-DB-001"],
+      "wave": 1
+    },
+    {
+      "id": "INFRA-E2E-001",
+      "epic": "EPIC-03",
+      "layer": "E2E",
+      "title": "E2E: Seeded SuperAdmin can login (E2E-14)",
+      "description": "Playwright: login as seeded SuperAdmin, assert dashboard visible. Tests: E2E-14.",
+      "acceptance_criteria": ["E2E-14 passes on staging with seeded data"],
+      "depends_on": ["INFRA-TEST-001", "AUTH-UI-001"],
+      "wave": 1
+    },
+    {
+      "id": "PEOPLE-DB-001",
+      "epic": "EPIC-04",
+      "layer": "DB",
+      "title": "Create departments table migration",
+      "description": "EF Core migration: `departments` table (id UUID PK, name varchar(100) unique not null, description, is_active bool default true, created_at UTC, updated_at UTC). Index on name. FRs: FR-21 to FR-26. Tests: IT-9.",
+      "acceptance_criteria": ["Migration runs clean", "departments.name unique constraint enforced at DB level", "Soft delete via is_active (no physical delete)"],
+      "depends_on": ["INFRA-DB-001"],
+      "wave": 1
+    },
+    {
+      "id": "PEOPLE-API-001",
+      "epic": "EPIC-04",
+      "layer": "API",
+      "title": "Implement Department CRUD endpoints",
+      "description": "DepartmentService: CRUD — POST /api/v1/departments (HR Admin/Super Admin), GET /api/v1/departments (all authenticated), PUT /api/v1/departments/{id}, DELETE /api/v1/departments/{id} (soft-delete, reject if employees assigned). Cache department list in IMemoryCache (1h TTL, invalidated on mutation). FRs: FR-21 to FR-26. Tests: UT-14, UT-15, IT-9, IT-10.",
+      "acceptance_criteria": ["409 if department name already exists", "403 if Employee/Manager tries to create/edit/delete", "Soft-delete returns 409 if department has active employees", "Cache invalidated on create/update/delete"],
+      "depends_on": ["PEOPLE-DB-001"],
+      "wave": 1
+    },
+    {
+      "id": "PEOPLE-UI-001",
+      "epic": "EPIC-04",
+      "layer": "UI",
+      "title": "Build Department management page",
+      "description": "Page at /admin/departments (HR Admin + Super Admin). MUI DataGrid of departments: name, description, employee count, status, actions. Add/Edit dialog (React Hook Form). Soft-delete with confirmation. Employee count badge. FRs: FR-21 to FR-26. Tests: E2E not required (no PT- mapped).",
+      "acceptance_criteria": ["CRUD operations work end-to-end in UI", "409 error shown as toast notification", "Inactive departments greyed out"],
+      "depends_on": ["PEOPLE-API-001"],
+      "wave": 1
+    },
+    {
+      "id": "PEOPLE-INT-001",
+      "epic": "EPIC-04",
+      "layer": "INT",
+      "title": "Wire DepartmentService into DI and IMemoryCache",
+      "description": "Register DepartmentService in DI. Wire IMemoryCache for department list endpoint. Verify RBAC middleware enforces HR Admin/Super Admin on write endpoints. Tests: IT-9, IT-10.",
+      "acceptance_criteria": ["Cache hit verified in integration test", "RBAC 403 verified for Employee role"],
+      "depends_on": ["PEOPLE-API-001", "PEOPLE-UI-001"],
+      "wave": 1
+    },
+    {
+      "id": "PEOPLE-TEST-001",
+      "epic": "EPIC-04",
+      "layer": "TEST",
+      "title": "Integration tests for Department domain (IT-9, IT-10)",
+      "description": "IT-9: CRUD happy path against real DB. IT-10: uniqueness constraint, soft-delete with employees check. Tests: IT-9, IT-10.",
+      "acceptance_criteria": ["Both tests pass against real PostgreSQL"],
+      "depends_on": ["PEOPLE-INT-001"],
+      "wave": 1
+    },
+    {
+      "id": "PEOPLE-DB-002",
+      "epic": "EPIC-05",
+      "layer": "DB",
+      "title": "Add profile columns to users table and manager self-reference FK",
+      "description": "EF migration: add to `users` — first_name, last_name, phone, join_date, manager_id (nullable FK self-ref to users.id), department_id FK to departments.id, employee_code unique. Add index on department_id and manager_id. Role enum column (Employee=0, Manager=1, HRAdmin=2, SuperAdmin=3). FRs: FR-12 to FR-20. Tests: IT-11.",
+      "acceptance_criteria": ["manager_id allows NULL (no-manager employees)", "department_id FK with restrict on delete", "employee_code unique index enforced"],
+      "depends_on": ["PEOPLE-DB-001"],
+      "wave": 1
+    },
+    {
+      "id": "PEOPLE-API-002",
+      "epic": "EPIC-05",
+      "layer": "API",
+      "title": "Implement Employee CRUD and role-derivation endpoints",
+      "description": "EmployeeService: POST /api/v1/employees, GET /api/v1/employees, GET /api/v1/employees/{id}, PUT /api/v1/employees/{id}, DELETE /api/v1/employees/{id} (soft deactivate). DeriveRole: if employee has any direct reports, auto-set role=Manager. Idempotent: already-Manager with direct reports stays Manager. GET /api/v1/employees/{id}/team (Manager/HR Admin/Super Admin). FRs: FR-12 to FR-20. Tests: UT-16 to UT-20, IT-11 to IT-15.",
+      "acceptance_criteria": ["Role derivation fires on every create/update", "employee_code unique — 409 on duplicate", "Deactivated employee cannot login", "Manager sees only their direct team via /team endpoint"],
+      "depends_on": ["PEOPLE-DB-002"],
+      "wave": 1
+    },
+    {
+      "id": "PEOPLE-UI-002",
+      "epic": "EPIC-05",
+      "layer": "UI",
+      "title": "Build Employee management and profile pages",
+      "description": "HR Admin: /admin/employees — DataGrid, add/edit dialog, deactivate button. Employee: /profile — view/edit own profile (restricted fields). Manager dropdown in edit dialog (shows only Managers). Department dropdown. Role field read-only (auto-derived shown as badge). FRs: FR-12 to FR-20.",
+      "acceptance_criteria": ["Role badge updates after manager assignment without page reload", "Deactivated employees show greyed-out status", "Employee cannot change own role"],
+      "depends_on": ["PEOPLE-API-002"],
+      "wave": 1
+    },
+    {
+      "id": "PEOPLE-INT-002",
+      "epic": "EPIC-05",
+      "layer": "INT",
+      "title": "Wire EmployeeService DI and role auto-derivation trigger",
+      "description": "Register EmployeeService. Wire AuditService.LogAsync into all employee state changes. Verify role derivation is triggered on save/edit. Tests: IT-11 to IT-15.",
+      "acceptance_criteria": ["AuditService called on every employee mutation", "Role derivation verified via integration test"],
+      "depends_on": ["PEOPLE-API-002", "PEOPLE-UI-002"],
+      "wave": 1
+    },
+    {
+      "id": "PEOPLE-TEST-002",
+      "epic": "EPIC-05",
+      "layer": "TEST",
+      "title": "Integration tests for Employee domain (IT-11 to IT-15)",
+      "description": "IT-11: create employee, verify DB row. IT-12: assign direct report, verify role becomes Manager. IT-13: idempotent role derivation. IT-14: deactivate, verify login blocked. IT-15: /team returns only direct reports. Tests: IT-11 to IT-15.",
+      "acceptance_criteria": ["All 5 tests pass"],
+      "depends_on": ["PEOPLE-INT-002"],
+      "wave": 1
+    },
+    {
+      "id": "LEAVECORE-DB-001",
+      "epic": "EPIC-06",
+      "layer": "DB",
+      "title": "Create leave_types table migration",
+      "description": "EF migration: `leave_types` (id UUID PK, name varchar(100) unique, max_days_per_year int nullable, carry_forward bool, accrual_type enum(Annual/OneTime/Unlimited), requires_document bool, is_active bool, created_at UTC). FRs: FR-27 to FR-30. Tests: IT-16.",
+      "acceptance_criteria": ["Migration clean", "name unique constraint", "accrual_type stored as int enum"],
+      "depends_on": ["INFRA-DB-001"],
+      "wave": 1
+    },
+    {
+      "id": "LEAVECORE-API-001",
+      "epic": "EPIC-06",
+      "layer": "API",
+      "title": "Implement Leave Type CRUD endpoints",
+      "description": "LeaveTypeService: POST/GET/PUT/DELETE /api/v1/leave-types. Soft delete only. Cache in IMemoryCache (1h TTL). HR Admin/Super Admin for writes. FR-27 to FR-30. Tests: UT-21, IT-16.",
+      "acceptance_criteria": ["Cannot delete leave type with existing balance rows (409)", "Cache invalidated on mutation", "Unpaid Leave: max_days_per_year NULL allowed"],
+      "depends_on": ["LEAVECORE-DB-001"],
+      "wave": 1
+    },
+    {
+      "id": "LEAVECORE-UI-001",
+      "epic": "EPIC-06",
+      "layer": "UI",
+      "title": "Build Leave Types management page",
+      "description": "/admin/leave-types (HR Admin + Super Admin). DataGrid: name, max days, carry forward, accrual type, active. Add/Edit dialog. FRs: FR-27 to FR-30.",
+      "acceptance_criteria": ["Form validates max_days_per_year as optional for Unlimited type"],
+      "depends_on": ["LEAVECORE-API-001"],
+      "wave": 1
+    },
+    {
+      "id": "LEAVECORE-INT-001",
+      "epic": "EPIC-06",
+      "layer": "INT",
+      "title": "Integration test: Leave Types CRUD (IT-16)",
+      "description": "IT-16: create, read, update, soft-delete leave type. Verify cache behavior. Tests: IT-16.",
+      "acceptance_criteria": ["IT-16 passes"],
+      "depends_on": ["LEAVECORE-UI-001"],
+      "wave": 1
+    },
+    {
+      "id": "LEAVECORE-TEST-001",
+      "epic": "EPIC-06",
+      "layer": "TEST",
+      "title": "Unit test: LeaveTypeService validation (UT-21)",
+      "description": "UT-21: Unpaid Leave with NULL max_days does not fail validation. xUnit, Moq. Tests: UT-21.",
+      "acceptance_criteria": ["UT-21 passes, Category=Unit"],
+      "depends_on": ["LEAVECORE-INT-001"],
+      "wave": 1
+    },
+    {
+      "id": "LEAVECORE-DB-002",
+      "epic": "EPIC-07",
+      "layer": "DB",
+      "title": "Create leave_balances table and Hangfire schema",
+      "description": "EF migration: `leave_balances` (id UUID PK, user_id FK, leave_type_id FK, year int, allocated_days decimal, used_days decimal, carried_forward_days decimal, created_at UTC, updated_at UTC). Unique index on (user_id, leave_type_id, year). Hangfire schema initialized in same PostgreSQL DB (hangfire schema). FRs: FR-31 to FR-38. Tests: IT-17.",
+      "acceptance_criteria": ["Unique constraint on (user_id, leave_type_id, year)", "Hangfire tables created in hangfire schema", "used_days + carried <= allocated never enforced at DB (enforced in service)"],
+      "depends_on": ["LEAVECORE-DB-001", "PEOPLE-DB-002"],
+      "wave": 1
+    },
+    {
+      "id": "LEAVECORE-API-002",
+      "epic": "EPIC-07",
+      "layer": "API",
+      "title": "Implement Leave Balance service and Hangfire background jobs",
+      "description": "LeaveBalanceService: GetBalance, DeductBalance, RestoreBalance, CreditAnnual, ProrateForNewJoiner, YearEndLapse. Hangfire recurring jobs: NewYearCreditJob (01 Jan IST = 31 Dec 18:30 UTC cron), YearEndLapseJob (31 Dec IST), CompOffExpiryJob (daily, expire comp-off credits older than 180 days). GET /api/v1/leave-balances/me, GET /api/v1/leave-balances/{userId} (HR Admin). FRs: FR-31 to FR-38. Tests: UT-22 to UT-31, IT-17, IT-18.",
+      "acceptance_criteria": ["Unpaid Leave balance check skipped (balance=0 still submittable)", "Proration formula: (remaining_months/12) * annual_entitlement", "YearEndLapse: non-carry-forward types set to 0", "Hangfire jobs registered with correct cron"],
+      "depends_on": ["LEAVECORE-DB-002"],
+      "wave": 1
+    },
+    {
+      "id": "LEAVECORE-UI-002",
+      "epic": "EPIC-07",
+      "layer": "UI",
+      "title": "Build Leave Balance display widget",
+      "description": "Balance cards on Employee Dashboard: leave type name, allocated, used, remaining. Progress bar per type. Year selector. Comp-off credit expiry warning (< 30 days). FRs: FR-31 to FR-38. Tests: E2E-5.",
+      "acceptance_criteria": ["Balance updates in real-time after leave approval", "Unpaid leave shows 'Unlimited'", "Comp-off expiry warning shown when applicable"],
+      "depends_on": ["LEAVECORE-API-002"],
+      "wave": 1
+    },
+    {
+      "id": "LEAVECORE-INT-002",
+      "epic": "EPIC-07",
+      "layer": "INT",
+      "title": "Integration tests: Leave Balance deduct/restore/lapse (IT-17, IT-18)",
+      "description": "IT-17: CreditAnnual for new user, verify balance row created. IT-18: DeductBalance then RestoreBalance, verify net zero. Tests: IT-17, IT-18.",
+      "acceptance_criteria": ["Both tests pass with decimal precision"],
+      "depends_on": ["LEAVECORE-UI-002"],
+      "wave": 1
+    },
+    {
+      "id": "LEAVECORE-TEST-002",
+      "epic": "EPIC-07",
+      "layer": "TEST",
+      "title": "Unit tests: LeaveBalanceService edge cases (UT-22 to UT-31)",
+      "description": "UT-22: CreditAnnual allocates correct days. UT-23: DeductBalance reduces used_days. UT-24: RestoreBalance increases remaining. UT-25: ProrateForNewJoiner mid-year formula. UT-26: Unpaid Leave zero balance does not block. UT-27: carry-forward cap. UT-28: YearEndLapse zeroes non-carry types. UT-29: NewYearCredit creates new year row. UT-30: CompOffExpiry marks expired. UT-31: balance cannot go negative. xUnit, Moq. Tests: UT-22 to UT-31.",
+      "acceptance_criteria": ["All 10 unit tests pass, Category=Unit"],
+      "depends_on": ["LEAVECORE-INT-002"],
+      "wave": 1
+    },
+    {
+      "id": "LEAVECORE-DB-003",
+      "epic": "EPIC-08",
+      "layer": "DB",
+      "title": "Create holidays table migration",
+      "description": "EF migration: `holidays` (id UUID PK, date date unique, name varchar(200), is_optional bool, created_at UTC). Index on date. FRs: FR-62 to FR-65. Tests: IT-19.",
+      "acceptance_criteria": ["date column unique constraint", "Index on date for fast IsHoliday lookup"],
+      "depends_on": ["INFRA-DB-001"],
+      "wave": 1
+    },
+    {
+      "id": "LEAVECORE-API-003",
+      "epic": "EPIC-08",
+      "layer": "API",
+      "title": "Implement Holiday CRUD and bulk CSV import",
+      "description": "HolidayService: CreateHoliday, BulkImport (multipart/form-data CSV — columns: date YYYY-MM-DD, name, is_optional), IsHoliday. GET /api/v1/holidays?year= (all authenticated). POST /api/v1/holidays (HR Admin). POST /api/v1/holidays/bulk-import (HR Admin, CSV). DELETE /api/v1/holidays/{id} (HR Admin). Cache holiday list 1h TTL. FRs: FR-62 to FR-65. Tests: UT-32, UT-33, IT-19, IT-20.",
+      "acceptance_criteria": ["CSV import validates date format, rejects malformed rows with row-level errors", "Duplicate dates in CSV are skipped with warning (not error)", "Cache invalidated on any write", "IsHoliday uses cached list (no extra DB call)"],
+      "depends_on": ["LEAVECORE-DB-003"],
+      "wave": 1
+    },
+    {
+      "id": "LEAVECORE-UI-003",
+      "epic": "EPIC-08",
+      "layer": "UI",
+      "title": "Build Holiday Calendar page with FullCalendar",
+      "description": "/holidays — FullCalendar month view, holidays shown as marked days. HR Admin: add/delete holiday dialog. CSV import button with drag-drop. Employee/Manager: read-only. FRs: FR-62 to FR-65. Tests: E2E-10.",
+      "acceptance_criteria": ["Holidays visible to all authenticated users", "CSV import shows row-level errors in UI"],
+      "depends_on": ["LEAVECORE-API-003"],
+      "wave": 1
+    },
+    {
+      "id": "LEAVECORE-INT-003",
+      "epic": "EPIC-08",
+      "layer": "INT",
+      "title": "Integration tests: Holiday CRUD and CSV import (IT-19, IT-20)",
+      "description": "IT-19: create holiday, verify IsHoliday returns true. IT-20: bulk import CSV with 10 holidays, verify all inserted; re-import same file, verify no duplicates. Tests: IT-19, IT-20.",
+      "acceptance_criteria": ["Both tests pass"],
+      "depends_on": ["LEAVECORE-UI-003"],
+      "wave": 1
+    },
+    {
+      "id": "LEAVECORE-TEST-003",
+      "epic": "EPIC-08",
+      "layer": "TEST",
+      "title": "Unit tests: HolidayService and E2E calendar (UT-32, UT-33, E2E-10)",
+      "description": "UT-32: IsHoliday returns true for known holiday. UT-33: IsHoliday returns false for working day. E2E-10: Playwright — HR Admin uploads CSV, verifies calendar shows new holidays. Tests: UT-32, UT-33, E2E-10.",
+      "acceptance_criteria": ["Unit tests pass; E2E-10 passes on staging"],
+      "depends_on": ["LEAVECORE-INT-003"],
+      "wave": 1
+    },
+    {
+      "id": "LEAVECORE-DB-004",
+      "epic": "EPIC-09",
+      "layer": "DB",
+      "title": "Create leave_requests and approval_steps tables",
+      "description": "EF migration: `leave_requests` (id UUID PK, employee_id FK, leave_type_id FK, start_date, end_date, computed_days decimal, status enum(Draft/Pending/Approved/Rejected/Cancelled/Revoked), is_retroactive bool, reason text, document_url, created_at UTC, updated_at UTC). `approval_steps` (id UUID PK, leave_request_id FK, step_number int, approver_id FK, status enum(Pending/Approved/Rejected), acted_at UTC, comment text). Indexes on employee_id, status, start_date. FRs: FR-39 to FR-50.",
+      "acceptance_criteria": ["approval_steps FK to leave_requests cascade delete", "status stored as int enum", "Indexes on employee_id + status for dashboard queries"],
+      "depends_on": ["LEAVECORE-DB-002", "PEOPLE-DB-002"],
+      "wave": 2
+    },
+    {
+      "id": "LEAVECORE-API-004",
+      "epic": "EPIC-09",
+      "layer": "API",
+      "title": "Implement Leave Request CRUD and sandwich rule computation",
+      "description": "LeaveRequestService: CreateDraft (POST /api/v1/leave-requests), SubmitRequest (POST /api/v1/leave-requests/{id}/submit), CancelRequest (POST /api/v1/leave-requests/{id}/cancel), RevokeRequest (HR Admin, POST /api/v1/leave-requests/{id}/revoke). SandwichRuleEngine.ComputeLeaveDays: count business days in [start_date..end_date] including sandwiched non-working days within the SAME request range. Retroactive: start_date < today. Balance check on submit (skip for Unpaid Leave). Document upload via multipart if leave type requires_document. FRs: FR-39 to FR-50. Tests: UT-34 to UT-42, IT-21 to IT-32.",
+      "acceptance_criteria": ["Sandwich rule: weekend/holiday between leave days counts as leave day", "Retroactive flag set when start_date < today", "Balance check blocks submit if insufficient (except Unpaid)", "Overlapping request dates return 409", "computed_days saved to DB on submit"],
+      "depends_on": ["LEAVECORE-DB-004", "LEAVECORE-API-002", "LEAVECORE-API-003"],
+      "wave": 2
+    },
+    {
+      "id": "LEAVECORE-UI-004",
+      "epic": "EPIC-09",
+      "layer": "UI",
+      "title": "Build Leave Request form and history page",
+      "description": "Employee: /leaves/new — date range picker (FullCalendar or MUI DatePicker), leave type select, reason textarea, document upload. Live computed_days preview (calls API). /leaves/history — DataGrid of own requests, status badges, cancel button for Pending. Manager: /leaves/team — team leave list with pending approval badges. HR Admin: /admin/leaves — all requests, revoke button. FRs: FR-39 to FR-50. Tests: E2E-4, E2E-9.",
+      "acceptance_criteria": ["Date range picker disables past-selected approved leave dates", "computed_days updates on date change", "Cancel only available for Pending/Draft status"],
+      "depends_on": ["LEAVECORE-API-004"],
+      "wave": 2
+    },
+    {
+      "id": "LEAVECORE-INT-004",
+      "epic": "EPIC-09",
+      "layer": "INT",
+      "title": "Integration tests: Leave Request lifecycle (IT-21 to IT-32)",
+      "description": "IT-21: submit annual leave, verify balance deducted. IT-22: sandwich rule — verify non-working day counted. IT-23: overlap detection returns 409. IT-24: cancel restores balance. IT-25: Unpaid Leave submits with 0 balance. IT-26: retroactive flag set correctly. IT-27: document required — reject without doc. IT-28: revoke by HR Admin restores balance. IT-29 to IT-32: boundary date cases. Tests: IT-21 to IT-32.",
+      "acceptance_criteria": ["All 12 integration tests pass"],
+      "depends_on": ["LEAVECORE-UI-004"],
+      "wave": 2
+    },
+    {
+      "id": "LEAVECORE-TEST-004",
+      "epic": "EPIC-09",
+      "layer": "TEST",
+      "title": "Unit tests: SandwichRuleEngine edge cases (UT-34 to UT-42)",
+      "description": "UT-34: single working day = 1 day. UT-35: weekend between two leave days counted. UT-36: holiday between leave days counted. UT-37: both weekend and holiday. UT-38: non-working days between TWO SEPARATE requests NOT counted. UT-39: retroactive detection. UT-40: Unpaid Leave zero balance passes. UT-41: document required — service throws without doc. UT-42: computed_days stored on submit. Tests: UT-34 to UT-42.",
+      "acceptance_criteria": ["All 9 tests pass, Category=Unit, UT-38 explicitly tests cross-request isolation"],
+      "depends_on": ["LEAVECORE-INT-004"],
+      "wave": 2
+    },
+    {
+      "id": "LEAVECORE-E2E-001",
+      "epic": "EPIC-09",
+      "layer": "E2E",
+      "title": "E2E: Leave application with sandwich rule (E2E-4, E2E-9)",
+      "description": "E2E-4 (@smoke): Employee submits 3-day leave spanning a weekend, verifies computed_days=5, submits, checks status=Pending. E2E-9: Employee cancels a Pending request, verifies balance restored. Tests: E2E-4, E2E-9.",
+      "acceptance_criteria": ["E2E-4 tagged @smoke; E2E-9 verifies balance restoration"],
+      "depends_on": ["LEAVECORE-TEST-004"],
+      "wave": 2
+    },
+    {
+      "id": "COMPOFF-DB-001",
+      "epic": "EPIC-10",
+      "layer": "DB",
+      "title": "Create comp_off_requests and comp_off_credits tables",
+      "description": "EF migration: `comp_off_requests` (id UUID PK, employee_id FK, worked_date date, worked_hours decimal, status enum, created_at UTC). `comp_off_credits` (id UUID PK, employee_id FK, comp_off_request_id FK, credit_days decimal, expires_at date, used_days decimal, created_at UTC). Index on employee_id, expires_at. FRs: FR-51 to FR-57.",
+      "acceptance_criteria": ["expires_at computed as worked_date + 180 days at service layer", "credit_days: worked_hours >= 4 = 0.5 day, >= 8 = 1 day"],
+      "depends_on": ["PEOPLE-DB-002"],
+      "wave": 2
+    },
+    {
+      "id": "COMPOFF-API-001",
+      "epic": "EPIC-10",
+      "layer": "API",
+      "title": "Implement Comp-Off request and credit endpoints",
+      "description": "CompOffRequestService: SubmitRequest (POST /api/v1/comp-off/requests), ApproveRequest, RejectRequest. CompOffCreditService: CreditBalance (on approve — adds to leave_balances for comp-off type), ExpireCredits (Hangfire daily job). GET /api/v1/comp-off/requests/me, GET /api/v1/comp-off/credits/me. FRs: FR-51 to FR-57. Tests: UT-43 to UT-47, IT-33 to IT-36.",
+      "acceptance_criteria": ["worked_hours < 4: reject with validation error", "Credit computed: 4<=h<8=0.5d, h>=8=1d", "Approved comp-off increments leave_balances via LeaveBalanceService", "CompOffExpiryJob marks expired credits"],
+      "depends_on": ["COMPOFF-DB-001", "LEAVECORE-API-002"],
+      "wave": 2
+    },
+    {
+      "id": "COMPOFF-UI-001",
+      "epic": "EPIC-10",
+      "layer": "UI",
+      "title": "Build Comp-Off request and credits UI",
+      "description": "Employee: /comp-off/new — date picker, hours input, reason. /comp-off/history — request list with status, credits earned. Credit expiry badge on dashboard (< 30 days). Manager: /comp-off/team — pending comp-off requests to approve/reject. FRs: FR-51 to FR-57. Tests: E2E-8.",
+      "acceptance_criteria": ["Hours input validates >= 4 client-side", "Credits page shows expiry date per credit batch"],
+      "depends_on": ["COMPOFF-API-001"],
+      "wave": 2
+    },
+    {
+      "id": "COMPOFF-INT-001",
+      "epic": "EPIC-10",
+      "layer": "INT",
+      "title": "Integration tests: Comp-Off workflow (IT-33 to IT-36)",
+      "description": "IT-33: submit comp-off for 8 hours, verify 1 day credit on approve. IT-34: submit for 4 hours, verify 0.5 day credit. IT-35: comp-off credit reduces balance after leave taken. IT-36: expired credit not usable. Tests: IT-33 to IT-36.",
+      "acceptance_criteria": ["All 4 tests pass"],
+      "depends_on": ["COMPOFF-UI-001"],
+      "wave": 2
+    },
+    {
+      "id": "COMPOFF-TEST-001",
+      "epic": "EPIC-10",
+      "layer": "TEST",
+      "title": "Unit tests + E2E: Comp-Off (UT-43 to UT-47, E2E-8)",
+      "description": "UT-43: < 4 hours rejected. UT-44: 4 hours = 0.5 day. UT-45: 8 hours = 1 day. UT-46: credit expires after 180 days. UT-47: credit added to leave balance on approve. E2E-8: Employee submits comp-off, Manager approves, Employee sees credit. Tests: UT-43 to UT-47, E2E-8.",
+      "acceptance_criteria": ["All unit tests pass; E2E-8 passes on staging"],
+      "depends_on": ["COMPOFF-INT-001"],
+      "wave": 2
+    },
+    {
+      "id": "COMPOFF-E2E-001",
+      "epic": "EPIC-10",
+      "layer": "E2E",
+      "title": "E2E: Comp-Off full flow (E2E-8 — duplicate link to COMPOFF-TEST-001)",
+      "description": "Covered in COMPOFF-TEST-001. This issue tracks E2E runner config only: ensure playwright.config.ts baseURL points to staging, @smoke tag NOT applied to E2E-8. Tests: E2E-8.",
+      "acceptance_criteria": ["E2E-8 passes in CI staging run"],
+      "depends_on": ["COMPOFF-TEST-001"],
+      "wave": 2
+    },
+    {
+      "id": "LEAVECORE-API-005",
+      "epic": "EPIC-11",
+      "layer": "API",
+      "title": "Implement Approval Engine (L1/L2 routing, no-manager rule)",
+      "description": "ApprovalService: ApproveL1, ApproveL2, RejectRequest, GetPendingApprovals. Routing: if employee.manager_id IS NULL → HR Admin is L1, L2 unconditionally skipped (even retroactive). If manager present: L1=Manager, L2=HR Admin only if (leave_type.requires_l2 OR is_retroactive). No-manager overrides all — HR Admin as L1 skips L2 regardless. GET /api/v1/approvals/pending (Manager sees team; HR Admin sees all pending HR-level). POST /api/v1/approvals/{id}/approve, POST /api/v1/approvals/{id}/reject. FRs: FR-58 to FR-61. Tests: UT-48 to UT-53, IT-37 to IT-41.",
+      "acceptance_criteria": ["No-manager: single approval step, HR Admin approves, done (no L2)", "Retroactive with manager: L1=Manager, L2=HR Admin", "Retroactive without manager: L1=HR Admin only, L2 skipped", "ApprovalService calls LeaveBalanceService.DeductBalance on L2 (or L1-only) final approve"],
+      "depends_on": ["LEAVECORE-API-004", "PEOPLE-API-002"],
+      "wave": 2
+    },
+    {
+      "id": "LEAVECORE-UI-005",
+      "epic": "EPIC-11",
+      "layer": "UI",
+      "title": "Build Approval inbox UI",
+      "description": "Manager: /approvals — list of pending team requests. Approve/Reject with comment. HR Admin: /approvals — shows HR-level pending (L2 queue or L1 no-manager queue). Request detail modal: employee name, leave type, dates, computed_days, retroactive badge, document link. FRs: FR-58 to FR-61. Tests: E2E-6, E2E-7.",
+      "acceptance_criteria": ["Retroactive badge shown on request cards", "Comment field required on reject", "HR Admin queue shows no-manager employees' requests as L1"],
+      "depends_on": ["LEAVECORE-API-005"],
+      "wave": 2
+    },
+    {
+      "id": "LEAVECORE-INT-005",
+      "epic": "EPIC-11",
+      "layer": "INT",
+      "title": "Integration tests: Approval routing (IT-37 to IT-41)",
+      "description": "IT-37: normal approval — Manager L1 → HR Admin L2 → approved, balance deducted. IT-38: no-manager employee — HR Admin L1 only, L2 skipped. IT-39: retroactive with manager — L1 + L2 required. IT-40: retroactive without manager — L1 HR Admin only, L2 skipped. IT-41: reject at L1 restores balance (if any deducted). Tests: IT-37 to IT-41.",
+      "acceptance_criteria": ["All 5 tests pass; IT-40 explicitly verifies no-manager retroactive override"],
+      "depends_on": ["LEAVECORE-UI-005"],
+      "wave": 2
+    },
+    {
+      "id": "LEAVECORE-TEST-005",
+      "epic": "EPIC-11",
+      "layer": "TEST",
+      "title": "Unit tests + E2E: Approval Engine (UT-48 to UT-53, E2E-6, E2E-7)",
+      "description": "UT-48: normal 2-step routing. UT-49: single-step (no L2 trigger). UT-50: reject at L1. UT-51: reject at L2. UT-52: retroactive triggers L2 when manager present. UT-53: no-manager retroactive — L2 skipped. E2E-6 (@smoke): no-manager employee submits, HR Admin approves, done. E2E-7: normal L1+L2 flow. Tests: UT-48 to UT-53, E2E-6, E2E-7.",
+      "acceptance_criteria": ["UT-53 passes — no-manager overrides retroactive L2; E2E-6 @smoke passes"],
+      "depends_on": ["LEAVECORE-INT-005"],
+      "wave": 2
+    },
+    {
+      "id": "LEAVECORE-E2E-002",
+      "epic": "EPIC-11",
+      "layer": "E2E",
+      "title": "E2E runner config for Approval flows (E2E-6, E2E-7)",
+      "description": "Ensure E2E-6 is tagged @smoke in playwright suite. E2E-7 is full-flow non-smoke. Both trigger via workflow_dispatch only. Tests: E2E-6, E2E-7.",
+      "acceptance_criteria": ["E2E-6 in smoke suite; both pass on staging"],
+      "depends_on": ["LEAVECORE-TEST-005"],
+      "wave": 2
+    },
+    {
+      "id": "NOTIFICATIONS-DB-001",
+      "epic": "EPIC-12",
+      "layer": "DB",
+      "title": "Create notifications table",
+      "description": "EF migration: `notifications` (id UUID PK, user_id FK, type enum, title varchar(200), body text, is_read bool default false, resource_type varchar(50), resource_id UUID, created_at UTC). Index on (user_id, is_read, created_at). FRs: FR-66 to FR-71.",
+      "acceptance_criteria": ["Index supports unread count query efficiently", "resource_type/resource_id for deep-linking to leave request"],
+      "depends_on": ["PEOPLE-DB-002"],
+      "wave": 2
+    },
+    {
+      "id": "NOTIFICATIONS-API-001",
+      "epic": "EPIC-12",
+      "layer": "API",
+      "title": "Implement NotificationService, EmailService (SendGrid), CalendarService",
+      "description": "NotificationService: CreateNotification (in-app), MarkRead, GetUnreadCount. EmailService.SendEmailAsync: SendGrid v3 HTTP API, construct plain-text/inline-HTML body in C# string (NO template IDs, NO dynamic templates). CalendarService: CreateLeaveEvent, DeleteLeaveEvent using Google Calendar API v3 with service account JSON key (from env GOOGLE_CALENDAR_SERVICE_ACCOUNT_JSON). Events created on company shared calendar (calendarId from env GOOGLE_CALENDAR_ID). All notifications queued via Hangfire (email: 5 retries over 24h; calendar: 3 retries exp backoff). FRs: FR-66 to FR-71. Tests: UT-54, UT-55, IT-42 to IT-44.",
+      "acceptance_criteria": ["No SendGrid template ID in config or code", "Google Calendar uses service account — no per-user OAuth2", "Hangfire enqueues SendEmailAsync and CreateLeaveEvent", "MarkRead sets is_read=true"],
+      "depends_on": ["NOTIFICATIONS-DB-001", "LEAVECORE-API-005"],
+      "wave": 2
+    },
+    {
+      "id": "NOTIFICATIONS-UI-001",
+      "epic": "EPIC-12",
+      "layer": "UI",
+      "title": "Build notification bell and email trigger wiring",
+      "description": "Notification bell in AppBar: Axios polls GET /api/v1/notifications/unread-count every 60s. Badge shows count. Dropdown: last 10 notifications. Click → mark read + navigate to resource. FRs: FR-66 to FR-71. Tests: E2E-11.",
+      "acceptance_criteria": ["Badge disappears after mark-all-read", "60s polling interval (not WebSocket)", "Clicking notification navigates to leave request"],
+      "depends_on": ["NOTIFICATIONS-API-001"],
+      "wave": 2
+    },
+    {
+      "id": "NOTIFICATIONS-INT-001",
+      "epic": "EPIC-12",
+      "layer": "INT",
+      "title": "Integration tests: Notifications (IT-42 to IT-44)",
+      "description": "IT-42: leave approval triggers in-app notification to employee. IT-43: SendGrid email queued in Hangfire on approval. IT-44: Google Calendar service account creates event on shared calendar (mock or sandbox). Tests: IT-42 to IT-44.",
+      "acceptance_criteria": ["IT-44 verifies service account — no per-user OAuth2 flow", "IT-42 verifies notification row in DB", "IT-43 verifies Hangfire job enqueued"],
+      "depends_on": ["NOTIFICATIONS-UI-001"],
+      "wave": 2
+    },
+    {
+      "id": "NOTIFICATIONS-TEST-001",
+      "epic": "EPIC-12",
+      "layer": "TEST",
+      "title": "Unit tests + E2E: Notifications (UT-54, UT-55, E2E-11)",
+      "description": "UT-54: EmailService builds correct plain-text body (no template ID). UT-55: CalendarService constructs event with correct attendees from service account. E2E-11: leave approved, notification bell badge appears. Tests: UT-54, UT-55, E2E-11.",
+      "acceptance_criteria": ["UT-54 asserts no templateId property in SendGrid call", "E2E-11 passes on staging"],
+      "depends_on": ["NOTIFICATIONS-INT-001"],
+      "wave": 2
+    },
+    {
+      "id": "NOTIFICATIONS-E2E-001",
+      "epic": "EPIC-12",
+      "layer": "E2E",
+      "title": "E2E runner: notification bell (E2E-11)",
+      "description": "E2E-11 runner configuration and test file. Workflow_dispatch only. Tests: E2E-11.",
+      "acceptance_criteria": ["E2E-11 passes"],
+      "depends_on": ["NOTIFICATIONS-TEST-001"],
+      "wave": 2
+    },
+    {
+      "id": "REPORTING-DB-001",
+      "epic": "EPIC-14",
+      "layer": "DB",
+      "title": "Create audit_logs table",
+      "description": "EF migration: `audit_logs` (id UUID PK, action varchar(100), entity_type varchar(100), entity_id UUID, actor_id FK to users, old_value jsonb, new_value jsonb, created_at UTC). Append-only — no update/delete. Index on (entity_type, entity_id). FRs: FR-77 to FR-81. Tests: IT-49.",
+      "acceptance_criteria": ["No EF update migration for this table", "DB-level constraint or trigger preventing DELETE (or enforced at service only)", "jsonb columns for flexible old/new value storage"],
+      "depends_on": ["PEOPLE-DB-002"],
+      "wave": 2
+    },
+    {
+      "id": "REPORTING-API-002",
+      "epic": "EPIC-14",
+      "layer": "API",
+      "title": "Implement AuditService and audit log query endpoint",
+      "description": "AuditService.LogAsync (append-only, called from all domain services). GET /api/v1/audit-logs?entity_type=&entity_id=&from=&to= (HR Admin/Super Admin). AuditService throws on any Update/Delete attempt. Wire into: EmployeeService, DepartmentService, LeaveRequestService, CompOffRequestService, ApprovalService, AccountService. FRs: FR-77 to FR-81. Tests: UT-56, IT-49 to IT-51.",
+      "acceptance_criteria": ["LogAsync inserts only (never updates)", "Query endpoint paginates (max 100/page)", "AuditService wired in all 6 domain services"],
+      "depends_on": ["REPORTING-DB-001"],
+      "wave": 2
+    },
+    {
+      "id": "REPORTING-UI-005",
+      "epic": "EPIC-14",
+      "layer": "UI",
+      "title": "Build Audit Trail page",
+      "description": "/admin/audit (HR Admin + Super Admin). DataGrid: action, entity type, entity ID, actor, timestamp, old/new value diff viewer. Filters: entity type, date range, actor. FRs: FR-77 to FR-81. Tests: E2E-13.",
+      "acceptance_criteria": ["Diff viewer shows JSON diff of old vs new value", "Date range filter works", "HR Admin cannot delete audit logs (no delete button)"],
+      "depends_on": ["REPORTING-API-002"],
+      "wave": 2
+    },
+    {
+      "id": "REPORTING-INT-002",
+      "epic": "EPIC-14",
+      "layer": "INT",
+      "title": "Integration tests: Audit Trail (IT-49 to IT-51)",
+      "description": "IT-49: employee update triggers audit log entry. IT-50: attempt to delete audit log throws (service-level guard). IT-51: audit log query returns entries filtered by entity_type. Tests: IT-49 to IT-51.",
+      "acceptance_criteria": ["IT-50 verifies immutability explicitly"],
+      "depends_on": ["REPORTING-UI-005"],
+      "wave": 2
+    },
+    {
+      "id": "REPORTING-TEST-002",
+      "epic": "EPIC-14",
+      "layer": "TEST",
+      "title": "Unit test + E2E: Audit Trail (UT-56, E2E-13)",
+      "description": "UT-56: AuditService.Delete throws InvalidOperationException. E2E-13: HR Admin views audit log, verifies leave approval entry visible. Tests: UT-56, E2E-13.",
+      "acceptance_criteria": ["UT-56 passes; E2E-13 passes on staging"],
+      "depends_on": ["REPORTING-INT-002"],
+      "wave": 2
+    },
+    {
+      "id": "REPORTING-E2E-002",
+      "epic": "EPIC-14",
+      "layer": "E2E",
+      "title": "E2E runner: Audit Trail (E2E-13)",
+      "description": "E2E-13 runner config. Workflow_dispatch only. Tests: E2E-13.",
+      "acceptance_criteria": ["E2E-13 passes on staging"],
+      "depends_on": ["REPORTING-TEST-002"],
+      "wave": 2
+    },
+    {
+      "id": "REPORTING-API-001",
+      "epic": "EPIC-13",
+      "layer": "API",
+      "title": "Implement ReportService and dashboard data endpoints",
+      "description": "ReportService: GetUtilization, GetTrends, GetCompliance, ExportCsv. Endpoints: GET /api/v1/reports/utilization?year=&dept= (HR Admin/Super Admin). GET /api/v1/reports/trends?months= (HR Admin). GET /api/v1/reports/compliance (HR Admin). GET /api/v1/reports/export?type=utilization|trends — streaming CSV response (Content-Type: text/csv). GET /api/v1/dashboard/employee (Employee). GET /api/v1/dashboard/manager (Manager). GET /api/v1/dashboard/hr (HR Admin). GET /api/v1/dashboard/super-admin (Super Admin). FRs: FR-72 to FR-76. Tests: UT-57 to UT-59, IT-47, IT-48.",
+      "acceptance_criteria": ["CSV export streams (no memory buffering of full dataset)", "Each dashboard endpoint returns role-appropriate data only (403 for wrong role)", "GetCompliance checks leave plan submission rate"],
+      "depends_on": ["LEAVECORE-INT-005", "COMPOFF-INT-001", "NOTIFICATIONS-INT-001", "REPORTING-INT-002"],
+      "wave": 3
+    },
+    {
+      "id": "REPORTING-UI-001",
+      "epic": "EPIC-13",
+      "layer": "UI",
+      "title": "Build Employee Dashboard",
+      "description": "/ (default route for Employee): leave balance cards, upcoming approved leaves, quick-apply button, recent leave history. Chart.js donut for balance utilization. FRs: FR-72, FR-73. Tests: E2E-12.",
+      "acceptance_criteria": ["Balance cards match /leave-balances/me data", "Quick-apply navigates to /leaves/new"],
+      "depends_on": ["REPORTING-API-001"],
+      "wave": 3
+    },
+    {
+      "id": "REPORTING-UI-002",
+      "epic": "EPIC-13",
+      "layer": "UI",
+      "title": "Build Manager Dashboard",
+      "description": "/dashboard (Manager role): team leave calendar (FullCalendar), pending approvals count badge, team utilization chart, headcount on leave today. FRs: FR-72, FR-74. Tests: E2E-12.",
+      "acceptance_criteria": ["Team calendar shows all approved team leaves", "Pending badge matches /approvals/pending count"],
+      "depends_on": ["REPORTING-API-001"],
+      "wave": 3
+    },
+    {
+      "id": "REPORTING-UI-003",
+      "epic": "EPIC-13",
+      "layer": "UI",
+      "title": "Build HR Admin Dashboard and reports",
+      "description": "/dashboard (HR Admin): department-wise utilization bar chart, compliance gauge, pending requests across org, export buttons. /reports/utilization, /reports/trends pages with Chart.js. CSV export button calls streaming endpoint. FRs: FR-72, FR-75, FR-76. Tests: E2E-12.",
+      "acceptance_criteria": ["CSV export triggers file download in browser", "Department filter on utilization chart", "Compliance gauge shows % of employees who submitted leave plan"],
+      "depends_on": ["REPORTING-API-001"],
+      "wave": 3
+    },
+    {
+      "id": "REPORTING-UI-004",
+      "epic": "EPIC-13",
+      "layer": "UI",
+      "title": "Build Super Admin Dashboard",
+      "description": "/dashboard (Super Admin): system health (Hangfire job status), user counts, locked accounts count, recent audit events. FRs: FR-72, FR-75. Tests: E2E-12.",
+      "acceptance_criteria": ["Hangfire job status fetched from Hangfire dashboard API", "Links to /admin/users/locked"],
+      "depends_on": ["REPORTING-API-001"],
+      "wave": 3
+    },
+    {
+      "id": "REPORTING-INT-001",
+      "epic": "EPIC-13",
+      "layer": "INT",
+      "title": "Integration tests: Reporting and dashboards (IT-47, IT-48, IT-52, IT-53)",
+      "description": "IT-47: utilization report returns correct aggregated data. IT-48: CSV export streams correctly. IT-52: RBAC — Employee cannot access HR dashboard endpoint. IT-53: ProtectedRoute blocks unauthenticated access. Tests: IT-47, IT-48, IT-52, IT-53.",
+      "acceptance_criteria": ["IT-52 verifies 403 for Employee role on /dashboard/hr", "IT-48 verifies Content-Type: text/csv and streaming"],
+      "depends_on": ["REPORTING-UI-004"],
+      "wave": 3
+    },
+    {
+      "id": "REPORTING-TEST-001",
+      "epic": "EPIC-13",
+      "layer": "TEST",
+      "title": "Unit tests + E2E: Reporting (UT-57 to UT-59, UT-60, UT-61, E2E-12)",
+      "description": "UT-57: GetUtilization correct formula. UT-58: GetTrends month aggregation. UT-59: GetCompliance percentage. UT-60: ProtectedRoute redirects unauthenticated. UT-61: RoleProtectedRoute returns 403 for wrong role. E2E-12 (@smoke): each role sees correct dashboard. Tests: UT-57 to UT-61, E2E-12.",
+      "acceptance_criteria": ["E2E-12 tagged @smoke; all unit tests pass Category=Unit"],
+      "depends_on": ["REPORTING-INT-001"],
+      "wave": 3
+    },
+    {
+      "id": "REPORTING-E2E-001",
+      "epic": "EPIC-13",
+      "layer": "E2E",
+      "title": "E2E runner: Dashboard and reports (E2E-12, E2E-5)",
+      "description": "E2E-12 (@smoke): role dashboard routing. E2E-5: leave balance display correct after approval. Workflow_dispatch only. Tests: E2E-12, E2E-5.",
+      "acceptance_criteria": ["E2E-12 in smoke suite; E2E-5 passes"],
+      "depends_on": ["REPORTING-TEST-001"],
+      "wave": 3
+    }
+  ]
+}

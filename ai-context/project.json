@@ -1,0 +1,19 @@
+{
+  "name": "Leave Management System",
+  "slug": "lms-v5",
+  "created_at": "2026-07-22",
+  "workflow": "forge-greenfield",
+  "artifacts": {
+    "prd": "docs/prd.md",
+    "discovery": "docs/00_discovery.md",
+    "feature_summary": "docs/features/feature-summary.md",
+    "issues": "ai-context/issues.json",
+    "agile_index": "docs/agile/_index.md",
+    "task_status": "task_status.md"
+  },
+  "counts": {
+    "fr": 84,
+    "ac": 65,
+    "pt": 14
+  }
+}
