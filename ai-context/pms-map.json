@@ -1,0 +1,450 @@
+{
+  "platform": "github",
+  "repo": "radixdt3345/LMS",
+  "created": "2026-07-23T12:13:14Z",
+  "milestones": {
+    "EPIC-01": {
+      "number": 1,
+      "url": "https://github.com/radixdt3345/LMS/milestone/1"
+    },
+    "EPIC-02": {
+      "number": 2,
+      "url": "https://github.com/radixdt3345/LMS/milestone/2"
+    },
+    "EPIC-03": {
+      "number": 3,
+      "url": "https://github.com/radixdt3345/LMS/milestone/3"
+    },
+    "EPIC-04": {
+      "number": 4,
+      "url": "https://github.com/radixdt3345/LMS/milestone/4"
+    },
+    "EPIC-05": {
+      "number": 5,
+      "url": "https://github.com/radixdt3345/LMS/milestone/5"
+    },
+    "EPIC-06": {
+      "number": 6,
+      "url": "https://github.com/radixdt3345/LMS/milestone/6"
+    },
+    "EPIC-07": {
+      "number": 7,
+      "url": "https://github.com/radixdt3345/LMS/milestone/7"
+    },
+    "EPIC-08": {
+      "number": 8,
+      "url": "https://github.com/radixdt3345/LMS/milestone/8"
+    },
+    "EPIC-09": {
+      "number": 9,
+      "url": "https://github.com/radixdt3345/LMS/milestone/9"
+    },
+    "EPIC-10": {
+      "number": 10,
+      "url": "https://github.com/radixdt3345/LMS/milestone/10"
+    },
+    "EPIC-11": {
+      "number": 11,
+      "url": "https://github.com/radixdt3345/LMS/milestone/11"
+    },
+    "EPIC-12": {
+      "number": 12,
+      "url": "https://github.com/radixdt3345/LMS/milestone/12"
+    },
+    "EPIC-13": {
+      "number": 13,
+      "url": "https://github.com/radixdt3345/LMS/milestone/13"
+    },
+    "EPIC-14": {
+      "number": 14,
+      "url": "https://github.com/radixdt3345/LMS/milestone/14"
+    }
+  },
+  "issues": {
+    "AUTH-DB-001": {
+      "number": 1,
+      "url": "https://github.com/radixdt3345/LMS/issues/1",
+      "state": "open"
+    },
+    "INFRA-DB-001": {
+      "number": 2,
+      "url": "https://github.com/radixdt3345/LMS/issues/2",
+      "state": "open"
+    },
+    "AUTH-API-001": {
+      "number": 3,
+      "url": "https://github.com/radixdt3345/LMS/issues/3",
+      "state": "open"
+    },
+    "AUTH-API-002": {
+      "number": 4,
+      "url": "https://github.com/radixdt3345/LMS/issues/4",
+      "state": "open"
+    },
+    "AUTH-API-003": {
+      "number": 5,
+      "url": "https://github.com/radixdt3345/LMS/issues/5",
+      "state": "open"
+    },
+    "AUTH-TEST-001": {
+      "number": 6,
+      "url": "https://github.com/radixdt3345/LMS/issues/6",
+      "state": "open"
+    },
+    "AUTH-API-004": {
+      "number": 7,
+      "url": "https://github.com/radixdt3345/LMS/issues/7",
+      "state": "open"
+    },
+    "AUTH-UI-002": {
+      "number": 8,
+      "url": "https://github.com/radixdt3345/LMS/issues/8",
+      "state": "open"
+    },
+    "AUTH-TEST-002": {
+      "number": 9,
+      "url": "https://github.com/radixdt3345/LMS/issues/9",
+      "state": "open"
+    },
+    "INFRA-TEST-001": {
+      "number": 10,
+      "url": "https://github.com/radixdt3345/LMS/issues/10",
+      "state": "open"
+    },
+    "PEOPLE-DB-001": {
+      "number": 11,
+      "url": "https://github.com/radixdt3345/LMS/issues/11",
+      "state": "open"
+    },
+    "PEOPLE-API-001": {
+      "number": 12,
+      "url": "https://github.com/radixdt3345/LMS/issues/12",
+      "state": "open"
+    },
+    "PEOPLE-UI-001": {
+      "number": 13,
+      "url": "https://github.com/radixdt3345/LMS/issues/13",
+      "state": "open"
+    },
+    "PEOPLE-TEST-001": {
+      "number": 14,
+      "url": "https://github.com/radixdt3345/LMS/issues/14",
+      "state": "open"
+    },
+    "PEOPLE-DB-002": {
+      "number": 15,
+      "url": "https://github.com/radixdt3345/LMS/issues/15",
+      "state": "open"
+    },
+    "PEOPLE-API-002": {
+      "number": 16,
+      "url": "https://github.com/radixdt3345/LMS/issues/16",
+      "state": "open"
+    },
+    "PEOPLE-UI-002": {
+      "number": 17,
+      "url": "https://github.com/radixdt3345/LMS/issues/17",
+      "state": "open"
+    },
+    "PEOPLE-TEST-002": {
+      "number": 18,
+      "url": "https://github.com/radixdt3345/LMS/issues/18",
+      "state": "open"
+    },
+    "LEAVECORE-DB-001": {
+      "number": 19,
+      "url": "https://github.com/radixdt3345/LMS/issues/19",
+      "state": "open"
+    },
+    "LEAVECORE-API-001": {
+      "number": 20,
+      "url": "https://github.com/radixdt3345/LMS/issues/20",
+      "state": "open"
+    },
+    "LEAVECORE-UI-001": {
+      "number": 21,
+      "url": "https://github.com/radixdt3345/LMS/issues/21",
+      "state": "open"
+    },
+    "LEAVECORE-INT-001": {
+      "number": 22,
+      "url": "https://github.com/radixdt3345/LMS/issues/22",
+      "state": "open"
+    },
+    "LEAVECORE-TEST-001": {
+      "number": 23,
+      "url": "https://github.com/radixdt3345/LMS/issues/23",
+      "state": "open"
+    },
+    "LEAVECORE-API-002": {
+      "number": 24,
+      "url": "https://github.com/radixdt3345/LMS/issues/24",
+      "state": "open"
+    },
+    "LEAVECORE-UI-002": {
+      "number": 25,
+      "url": "https://github.com/radixdt3345/LMS/issues/25",
+      "state": "open"
+    },
+    "LEAVECORE-INT-002": {
+      "number": 26,
+      "url": "https://github.com/radixdt3345/LMS/issues/26",
+      "state": "open"
+    },
+    "LEAVECORE-TEST-002": {
+      "number": 27,
+      "url": "https://github.com/radixdt3345/LMS/issues/27",
+      "state": "open"
+    },
+    "LEAVECORE-DB-003": {
+      "number": 28,
+      "url": "https://github.com/radixdt3345/LMS/issues/28",
+      "state": "open"
+    },
+    "LEAVECORE-API-003": {
+      "number": 29,
+      "url": "https://github.com/radixdt3345/LMS/issues/29",
+      "state": "open"
+    },
+    "LEAVECORE-UI-003": {
+      "number": 30,
+      "url": "https://github.com/radixdt3345/LMS/issues/30",
+      "state": "open"
+    },
+    "LEAVECORE-INT-003": {
+      "number": 31,
+      "url": "https://github.com/radixdt3345/LMS/issues/31",
+      "state": "open"
+    },
+    "LEAVECORE-TEST-003": {
+      "number": 32,
+      "url": "https://github.com/radixdt3345/LMS/issues/32",
+      "state": "open"
+    },
+    "LEAVECORE-UI-004": {
+      "number": 33,
+      "url": "https://github.com/radixdt3345/LMS/issues/33",
+      "state": "open"
+    },
+    "LEAVECORE-INT-004": {
+      "number": 34,
+      "url": "https://github.com/radixdt3345/LMS/issues/34",
+      "state": "open"
+    },
+    "LEAVECORE-TEST-004": {
+      "number": 35,
+      "url": "https://github.com/radixdt3345/LMS/issues/35",
+      "state": "open"
+    },
+    "LEAVECORE-E2E-001": {
+      "number": 36,
+      "url": "https://github.com/radixdt3345/LMS/issues/36",
+      "state": "open"
+    },
+    "COMPOFF-DB-001": {
+      "number": 37,
+      "url": "https://github.com/radixdt3345/LMS/issues/37",
+      "state": "open"
+    },
+    "COMPOFF-UI-001": {
+      "number": 38,
+      "url": "https://github.com/radixdt3345/LMS/issues/38",
+      "state": "open"
+    },
+    "COMPOFF-INT-001": {
+      "number": 39,
+      "url": "https://github.com/radixdt3345/LMS/issues/39",
+      "state": "open"
+    },
+    "COMPOFF-TEST-001": {
+      "number": 40,
+      "url": "https://github.com/radixdt3345/LMS/issues/40",
+      "state": "open"
+    },
+    "COMPOFF-E2E-001": {
+      "number": 41,
+      "url": "https://github.com/radixdt3345/LMS/issues/41",
+      "state": "open"
+    },
+    "LEAVECORE-UI-005": {
+      "number": 42,
+      "url": "https://github.com/radixdt3345/LMS/issues/42",
+      "state": "open"
+    },
+    "LEAVECORE-INT-005": {
+      "number": 43,
+      "url": "https://github.com/radixdt3345/LMS/issues/43",
+      "state": "open"
+    },
+    "LEAVECORE-TEST-005": {
+      "number": 44,
+      "url": "https://github.com/radixdt3345/LMS/issues/44",
+      "state": "open"
+    },
+    "LEAVECORE-E2E-002": {
+      "number": 45,
+      "url": "https://github.com/radixdt3345/LMS/issues/45",
+      "state": "open"
+    },
+    "NOTIFICATIONS-DB-001": {
+      "number": 46,
+      "url": "https://github.com/radixdt3345/LMS/issues/46",
+      "state": "open"
+    },
+    "NOTIFICATIONS-UI-001": {
+      "number": 47,
+      "url": "https://github.com/radixdt3345/LMS/issues/47",
+      "state": "open"
+    },
+    "NOTIFICATIONS-INT-001": {
+      "number": 48,
+      "url": "https://github.com/radixdt3345/LMS/issues/48",
+      "state": "open"
+    },
+    "NOTIFICATIONS-TEST-001": {
+      "number": 49,
+      "url": "https://github.com/radixdt3345/LMS/issues/49",
+      "state": "open"
+    },
+    "NOTIFICATIONS-E2E-001": {
+      "number": 50,
+      "url": "https://github.com/radixdt3345/LMS/issues/50",
+      "state": "open"
+    },
+    "REPORTING-DB-001": {
+      "number": 51,
+      "url": "https://github.com/radixdt3345/LMS/issues/51",
+      "state": "open"
+    },
+    "REPORTING-API-002": {
+      "number": 52,
+      "url": "https://github.com/radixdt3345/LMS/issues/52",
+      "state": "open"
+    },
+    "REPORTING-UI-005": {
+      "number": 53,
+      "url": "https://github.com/radixdt3345/LMS/issues/53",
+      "state": "open"
+    },
+    "REPORTING-INT-002": {
+      "number": 54,
+      "url": "https://github.com/radixdt3345/LMS/issues/54",
+      "state": "open"
+    },
+    "REPORTING-TEST-002": {
+      "number": 55,
+      "url": "https://github.com/radixdt3345/LMS/issues/55",
+      "state": "open"
+    },
+    "REPORTING-E2E-002": {
+      "number": 56,
+      "url": "https://github.com/radixdt3345/LMS/issues/56",
+      "state": "open"
+    },
+    "REPORTING-UI-001": {
+      "number": 57,
+      "url": "https://github.com/radixdt3345/LMS/issues/57",
+      "state": "open"
+    },
+    "REPORTING-UI-002": {
+      "number": 58,
+      "url": "https://github.com/radixdt3345/LMS/issues/58",
+      "state": "open"
+    },
+    "REPORTING-UI-003": {
+      "number": 59,
+      "url": "https://github.com/radixdt3345/LMS/issues/59",
+      "state": "open"
+    },
+    "REPORTING-UI-004": {
+      "number": 60,
+      "url": "https://github.com/radixdt3345/LMS/issues/60",
+      "state": "open"
+    },
+    "REPORTING-INT-001": {
+      "number": 61,
+      "url": "https://github.com/radixdt3345/LMS/issues/61",
+      "state": "open"
+    },
+    "REPORTING-TEST-001": {
+      "number": 62,
+      "url": "https://github.com/radixdt3345/LMS/issues/62",
+      "state": "open"
+    },
+    "REPORTING-E2E-001": {
+      "number": 63,
+      "url": "https://github.com/radixdt3345/LMS/issues/63",
+      "state": "open"
+    },
+    "AUTH-E2E-001": {
+      "number": 64,
+      "url": "https://github.com/radixdt3345/LMS/issues/64",
+      "state": "open"
+    },
+    "AUTH-INT-002": {
+      "number": 65,
+      "url": "https://github.com/radixdt3345/LMS/issues/65",
+      "state": "open"
+    },
+    "INFRA-E2E-001": {
+      "number": 66,
+      "url": "https://github.com/radixdt3345/LMS/issues/66",
+      "state": "open"
+    },
+    "PEOPLE-INT-001": {
+      "number": 67,
+      "url": "https://github.com/radixdt3345/LMS/issues/67",
+      "state": "open"
+    },
+    "PEOPLE-INT-002": {
+      "number": 68,
+      "url": "https://github.com/radixdt3345/LMS/issues/68",
+      "state": "open"
+    },
+    "LEAVECORE-DB-002": {
+      "number": 69,
+      "url": "https://github.com/radixdt3345/LMS/issues/69",
+      "state": "open"
+    },
+    "LEAVECORE-DB-004": {
+      "number": 70,
+      "url": "https://github.com/radixdt3345/LMS/issues/70",
+      "state": "open"
+    },
+    "COMPOFF-API-001": {
+      "number": 71,
+      "url": "https://github.com/radixdt3345/LMS/issues/71",
+      "state": "open"
+    },
+    "LEAVECORE-API-005": {
+      "number": 72,
+      "url": "https://github.com/radixdt3345/LMS/issues/72",
+      "state": "open"
+    },
+    "NOTIFICATIONS-API-001": {
+      "number": 73,
+      "url": "https://github.com/radixdt3345/LMS/issues/73",
+      "state": "open"
+    },
+    "AUTH-UI-001": {
+      "number": 74,
+      "url": "https://github.com/radixdt3345/LMS/issues/74",
+      "state": "open"
+    },
+    "AUTH-INT-001": {
+      "number": 75,
+      "url": "https://github.com/radixdt3345/LMS/issues/75",
+      "state": "open"
+    },
+    "LEAVECORE-API-004": {
+      "number": 76,
+      "url": "https://github.com/radixdt3345/LMS/issues/76",
+      "state": "open"
+    },
+    "REPORTING-API-001": {
+      "number": 77,
+      "url": "https://github.com/radixdt3345/LMS/issues/77",
+      "state": "open"
+    }
+  }
+}
