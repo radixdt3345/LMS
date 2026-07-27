@@ -62,6 +62,8 @@ public class SeedService : IHostedService, ISeedService
             {
                 Id = Guid.NewGuid(),
                 Name = "HR",
+                Description = "Human Resources department",
+                IsActive = true,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow,
             });
