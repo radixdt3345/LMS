@@ -1,24 +1,53 @@
+using System.Text;
+using LMS.Application.Interfaces;
+using LMS.Application.Settings;
 using LMS.Infrastructure.Data;
+using LMS.Infrastructure.Services;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Serilog
+// ── Serilog ───────────────────────────────────────────────────────────────────
 builder.Host.UseSerilog((ctx, lc) => lc
     .ReadFrom.Configuration(ctx.Configuration)
     .WriteTo.Console());
 
-// EF Core — PostgreSQL
+// ── EF Core — PostgreSQL ──────────────────────────────────────────────────────
 builder.Services.AddDbContext<LmsDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// Controllers
-builder.Services.AddControllers();
+// ── JWT Settings (bound from "JwtSettings" config section) ────────────────────
+builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("JwtSettings"));
+var jwtSettings = builder.Configuration.GetSection("JwtSettings").Get<JwtSettings>() ?? new JwtSettings();
 
-// Auth — JWT Bearer (to be fully configured in AUTH-API-001)
-builder.Services.AddAuthentication();
+// ── JWT Bearer Authentication ─────────────────────────────────────────────────
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = jwtSettings.Issuer,
+            ValidAudience = jwtSettings.Audience,
+            IssuerSigningKey = new SymmetricSecurityKey(
+                Encoding.UTF8.GetBytes(jwtSettings.SecretKey))
+        };
+    });
+
 builder.Services.AddAuthorization();
+
+// ── Application Services ──────────────────────────────────────────────────────
+builder.Services.AddScoped<ITokenService, TokenService>();
+builder.Services.AddScoped<IAuthService, AuthService>();
+
+// ── Controllers ───────────────────────────────────────────────────────────────
+builder.Services.AddControllers();
 
 var app = builder.Build();
 
