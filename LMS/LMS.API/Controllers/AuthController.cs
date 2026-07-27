@@ -2,6 +2,7 @@ using LMS.Application.DTOs.Auth;
 using LMS.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace LMS.API.Controllers;
 
@@ -22,8 +23,10 @@ public class AuthController : ControllerBase
     /// <summary>
     /// POST /api/v1/auth/login — local email/password login.
     /// Returns JWT access token (body only — never written to localStorage) and refresh token.
+    /// Rate-limited to 10 requests/minute per IP (FR-10).
     /// </summary>
     [HttpPost("login")]
+    [EnableRateLimiting("login")]
     public async Task<IActionResult> Login([FromBody] LoginRequestDto dto, CancellationToken ct)
     {
         var result = await _authService.LoginAsync(dto, ct);
