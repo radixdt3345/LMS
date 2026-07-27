@@ -114,11 +114,11 @@ public class SeedService : IHostedService, ISeedService
     {
         var leaveTypes = new[]
         {
-            new LeaveType { Id = Guid.NewGuid(), Name = "Annual Leave",              MaxDays = 18,   AccrualType = AccrualType.Annual,    IsActive = true, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow },
-            new LeaveType { Id = Guid.NewGuid(), Name = "Sick Leave",                MaxDays = 10,   AccrualType = AccrualType.Annual,    IsActive = true, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow },
-            new LeaveType { Id = Guid.NewGuid(), Name = "Casual Leave",              MaxDays = 7,    AccrualType = AccrualType.Annual,    IsActive = true, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow },
-            new LeaveType { Id = Guid.NewGuid(), Name = "Unpaid Leave",              MaxDays = null, AccrualType = AccrualType.Unlimited, IsActive = true, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow },
-            new LeaveType { Id = Guid.NewGuid(), Name = "Maternity/Paternity Leave", MaxDays = 90,   AccrualType = AccrualType.OneTime,   IsActive = true, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow },
+            new LeaveType { Id = Guid.NewGuid(), Name = "Annual Leave",              MaxDaysPerYear = 18,   AccrualType = AccrualType.Annual,    IsActive = true, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow },
+            new LeaveType { Id = Guid.NewGuid(), Name = "Sick Leave",                MaxDaysPerYear = 10,   AccrualType = AccrualType.Annual,    IsActive = true, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow },
+            new LeaveType { Id = Guid.NewGuid(), Name = "Casual Leave",              MaxDaysPerYear = 7,    AccrualType = AccrualType.Annual,    IsActive = true, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow },
+            new LeaveType { Id = Guid.NewGuid(), Name = "Unpaid Leave",              MaxDaysPerYear = null, AccrualType = AccrualType.Unlimited, IsActive = true, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow },
+            new LeaveType { Id = Guid.NewGuid(), Name = "Maternity/Paternity Leave", MaxDaysPerYear = 90,   AccrualType = AccrualType.OneTime,   IsActive = true, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow },
         };
 
         foreach (var lt in leaveTypes)
