@@ -18,7 +18,7 @@ Updated: 2026-07-27 | Phase: Wave 2
 | T-013 | INFRA-DB-001 | Development | COMPLETE | #2 | — |
 | T-014 | INFRA-TEST-001 | Testing | PENDING | #10 | T-013 |
 | T-015 | INFRA-E2E-001 | E2E | PENDING | #66 | T-014,T-005 |
-| T-016 | PEOPLE-DB-001 | Development | PENDING | #11 | T-013 |
+| T-016 | PEOPLE-DB-001 | Development | COMPLETE | #11 | T-013 |
 | T-017 | PEOPLE-API-001 | Development | PENDING | #12 | T-016 |
 | T-018 | PEOPLE-UI-001 | Development | PENDING | #13 | T-017 |
 | T-019 | PEOPLE-INT-001 | Development | PENDING | #67 | T-017,T-018 |
