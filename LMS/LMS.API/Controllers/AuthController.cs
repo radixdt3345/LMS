@@ -1,5 +1,6 @@
 using LMS.Application.DTOs.Auth;
 using LMS.Application.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace LMS.API.Controllers;
@@ -64,5 +65,61 @@ public class AuthController : ControllerBase
             });
 
         return Ok(new { success = true, data = result.Value });
+    }
+
+    /// <summary>
+    /// POST /api/v1/auth/refresh — rotates a refresh token.
+    /// Revokes the old token and issues a new JWT + refresh token pair.
+    /// Returns 401 for expired or revoked tokens. FR-8.
+    /// </summary>
+    [HttpPost("refresh")]
+    public async Task<IActionResult> RefreshToken(
+        [FromBody] RefreshTokenRequestDto dto, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(dto.RefreshToken))
+            return BadRequest(new
+            {
+                success = false,
+                error = new { message = "Refresh token is required." }
+            });
+
+        var result = await _authService.RefreshTokenAsync(dto.RefreshToken, ct);
+
+        if (!result.IsSuccess)
+            return StatusCode(result.StatusCode, new
+            {
+                success = false,
+                error = new { message = result.Error }
+            });
+
+        return Ok(new { success = true, data = result.Value });
+    }
+
+    /// <summary>
+    /// POST /api/v1/auth/logout — revokes the caller's refresh token.
+    /// Requires a valid JWT in the Authorization header. FR-9.
+    /// </summary>
+    [HttpPost("logout")]
+    [Authorize]
+    public async Task<IActionResult> Logout(
+        [FromBody] LogoutRequestDto dto, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(dto.RefreshToken))
+            return BadRequest(new
+            {
+                success = false,
+                error = new { message = "Refresh token is required." }
+            });
+
+        var result = await _authService.LogoutAsync(dto.RefreshToken, ct);
+
+        if (!result.IsSuccess)
+            return StatusCode(result.StatusCode, new
+            {
+                success = false,
+                error = new { message = result.Error }
+            });
+
+        return Ok(new { success = true });
     }
 }
