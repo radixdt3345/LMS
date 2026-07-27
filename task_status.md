@@ -3,7 +3,7 @@ Updated: 2026-07-23 | Phase: Wave 1
 
 | Task ID | Issue ID | Type | Status | GitHub Issue | Blocked By |
 |---------|----------|------|--------|-------------|------------|
-| T-001 | AUTH-DB-001 | Development | PENDING | #1 | — |  |
+| T-001 | AUTH-DB-001 | Development | IN_PROGRESS | #1 | — |  |
 | T-002 | AUTH-API-001 | Development | PENDING | #3 | T-001 |  |
 | T-003 | AUTH-API-002 | Development | PENDING | #4 | T-001 |  |
 | T-004 | AUTH-API-003 | Development | PENDING | #5 | T-002 |  |
