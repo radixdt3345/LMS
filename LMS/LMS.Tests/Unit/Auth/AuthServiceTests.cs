@@ -52,10 +52,15 @@ public class AuthServiceTests
         UpdatedAt = DateTime.UtcNow,
     };
 
+    /// <summary>
+    /// Builds AuthService with optional token service mock.
+    /// IMsalAuthProvider is always a no-op mock here — SSO tests live in SsoCallbackTests.
+    /// </summary>
     private static AuthService BuildService(LmsDbContext db, ITokenService? tokenSvc = null)
     {
         tokenSvc ??= new Mock<ITokenService>().Object;
-        return new AuthService(db, tokenSvc, DefaultJwtOptions());
+        var msalProvider = new Mock<IMsalAuthProvider>().Object;
+        return new AuthService(db, tokenSvc, DefaultJwtOptions(), msalProvider);
     }
 
     // ── UT-1: valid credentials → success + tokens ───────────────────────────
@@ -74,7 +79,7 @@ public class AuthServiceTests
         db.Users.Add(user);
         await db.SaveChangesAsync();
 
-        var svc = new AuthService(db, tokenSvc.Object, DefaultJwtOptions());
+        var svc = new AuthService(db, tokenSvc.Object, DefaultJwtOptions(), new Mock<IMsalAuthProvider>().Object);
         var result = await svc.LoginAsync(new LoginRequestDto
         {
             Email = "valid@example.com",
@@ -207,7 +212,7 @@ public class AuthServiceTests
         db.Users.Add(user);
         await db.SaveChangesAsync();
 
-        var svc = new AuthService(db, tokenSvc.Object, DefaultJwtOptions());
+        var svc = new AuthService(db, tokenSvc.Object, DefaultJwtOptions(), new Mock<IMsalAuthProvider>().Object);
         var result = await svc.LoginAsync(new LoginRequestDto
         {
             Email = "reset@example.com",

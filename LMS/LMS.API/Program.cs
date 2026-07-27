@@ -25,11 +25,13 @@ builder.Host.UseSerilog((ctx, lc) => lc
 builder.Services.AddDbContext<LmsDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// JWT Settings
+// Settings
 builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("JwtSettings"));
+builder.Services.Configure<AzureAdSettings>(builder.Configuration.GetSection("AzureAd"));
+
 var jwtSettings = builder.Configuration.GetSection("JwtSettings").Get<JwtSettings>() ?? new JwtSettings();
 
-// Authentication
+// Authentication — map custom "role" claim so [Authorize(Roles = "...")] works
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -42,13 +44,15 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidIssuer = jwtSettings.Issuer,
             ValidAudience = jwtSettings.Audience,
             IssuerSigningKey = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(jwtSettings.SecretKey))
+                Encoding.UTF8.GetBytes(jwtSettings.SecretKey)),
+            RoleClaimType = "role"   // TokenService uses "role" not ClaimTypes.Role
         };
     });
 
 // Application services
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<ITokenService, TokenService>();
+builder.Services.AddScoped<IMsalAuthProvider, MsalAuthProvider>();
 
 // Seeding
 builder.Services.AddHostedService<SeedService>();
