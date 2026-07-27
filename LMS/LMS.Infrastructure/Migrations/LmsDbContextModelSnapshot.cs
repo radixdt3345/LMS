@@ -75,8 +75,10 @@ namespace LMS.Infrastructure.Migrations
                         .HasDefaultValueSql("gen_random_uuid()");
 
                     b.Property<int>("AccrualType")
+                        .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
-                        .HasColumnName("accrual_type");
+                        .HasColumnName("accrual_type")
+                        .HasDefaultValue(0);
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamptz")
@@ -88,15 +90,21 @@ namespace LMS.Infrastructure.Migrations
                         .HasColumnName("is_active")
                         .HasDefaultValue(true);
 
-                    b.Property<int?>("MaxDays")
+                    b.Property<int?>("MaxDaysPerYear")
                         .HasColumnType("integer")
-                        .HasColumnName("max_days");
+                        .HasColumnName("max_days_per_year");
 
                     b.Property<string>("Name")
                         .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("character varying(256)")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
                         .HasColumnName("name");
+
+                    b.Property<bool>("RequiresDocument")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasColumnName("requires_document")
+                        .HasDefaultValue(false);
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamptz")
@@ -239,6 +247,20 @@ namespace LMS.Infrastructure.Migrations
                         .IsRequired();
 
                     b.Navigation("User");
+                });
+
+            modelBuilder.Entity("LMS.Domain.Entities.User", b =>
+                {
+                    b.HasOne("LMS.Domain.Entities.Department", null)
+                        .WithMany("Users")
+                        .HasForeignKey("DepartmentId")
+                        .HasConstraintName("fk_users_departments_department_id")
+                        .OnDelete(DeleteBehavior.SetNull);
+                });
+
+            modelBuilder.Entity("LMS.Domain.Entities.Department", b =>
+                {
+                    b.Navigation("Users");
                 });
 
             modelBuilder.Entity("LMS.Domain.Entities.User", b =>
