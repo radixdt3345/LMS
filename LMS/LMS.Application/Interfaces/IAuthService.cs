@@ -14,4 +14,15 @@ public interface IAuthService
     /// FR-5, FR-6.
     /// </summary>
     Task<Result<LoginResponseDto>> SsoCallbackAsync(string code, CancellationToken ct = default);
+
+    /// <summary>
+    /// Validates the refresh token hash, rotates it (revokes old, issues new JWT + refresh token).
+    /// Returns 401 for expired or revoked tokens. FR-8.
+    /// </summary>
+    Task<Result<LoginResponseDto>> RefreshTokenAsync(string refreshToken, CancellationToken ct = default);
+
+    /// <summary>
+    /// Revokes the refresh token from the database (sets revoked_at). FR-9.
+    /// </summary>
+    Task<Result<bool>> LogoutAsync(string refreshToken, CancellationToken ct = default);
 }

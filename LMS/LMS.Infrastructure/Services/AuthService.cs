@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using LMS.Application.DTOs.Auth;
 using LMS.Application.Interfaces;
 using LMS.Application.Settings;
@@ -149,4 +151,76 @@ public class AuthService : IAuthService
             ExpiresIn = _jwt.AccessTokenExpiryMinutes * 60,
         });
     }
+
+    /// <summary>
+    /// Validates the refresh token hash, rotates on use (revokes old, issues new pair).
+    /// Returns 401 for expired or revoked tokens. FR-8.
+    /// </summary>
+    public async Task<Result<LoginResponseDto>> RefreshTokenAsync(
+        string refreshToken, CancellationToken ct = default)
+    {
+        var hash = HashToken(refreshToken);
+
+        var token = await _db.RefreshTokens
+            .Include(t => t.User)
+            .FirstOrDefaultAsync(t => t.TokenHash == hash, ct);
+
+        if (token is null)
+            return Result<LoginResponseDto>.Failure("Invalid refresh token.", 401);
+
+        if (token.RevokedAt.HasValue)
+            return Result<LoginResponseDto>.Failure("Refresh token has been revoked.", 401);
+
+        if (token.ExpiresAt <= DateTime.UtcNow)
+            return Result<LoginResponseDto>.Failure("Refresh token has expired.", 401);
+
+        if (!token.User.IsActive)
+            return Result<LoginResponseDto>.Failure("Account is inactive.", 403);
+
+        // Rotate: revoke the old token, issue a new pair
+        token.RevokedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(ct);
+
+        var newAccessToken = _tokenService.IssueAccessToken(token.User);
+        var newRefreshToken = await _tokenService.IssueRefreshTokenAsync(token.User.Id, ct);
+
+        return Result<LoginResponseDto>.Success(new LoginResponseDto
+        {
+            AccessToken = newAccessToken,
+            RefreshToken = newRefreshToken,
+            ExpiresIn = _jwt.AccessTokenExpiryMinutes * 60,
+        });
+    }
+
+    /// <summary>
+    /// Revokes the refresh token (sets revoked_at). Idempotent — already-revoked tokens
+    /// are treated as success. FR-9.
+    /// </summary>
+    public async Task<Result<bool>> LogoutAsync(
+        string refreshToken, CancellationToken ct = default)
+    {
+        var hash = HashToken(refreshToken);
+
+        var token = await _db.RefreshTokens
+            .FirstOrDefaultAsync(t => t.TokenHash == hash, ct);
+
+        if (token is null)
+            return Result<bool>.Failure("Invalid refresh token.", 400);
+
+        if (!token.RevokedAt.HasValue)
+        {
+            token.RevokedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync(ct);
+        }
+
+        return Result<bool>.Success(true);
+    }
+
+    // ── Private helpers ─────────────────────────────────────────────────────
+
+    /// <summary>
+    /// SHA-256 hash of the raw token string. Matches the hash stored by TokenService.
+    /// </summary>
+    private static string HashToken(string rawToken) =>
+        Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(rawToken)));
 }
