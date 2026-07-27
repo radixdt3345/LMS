@@ -12,6 +12,8 @@ public class LmsDbContext : DbContext
 
     public DbSet<User> Users => Set<User>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+    public DbSet<Department> Departments => Set<Department>();
+    public DbSet<LeaveType> LeaveTypes => Set<LeaveType>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
