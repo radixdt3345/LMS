@@ -114,6 +114,55 @@ namespace LMS.Infrastructure.Migrations
                     b.ToTable("holidays");
                 });
 
+            modelBuilder.Entity("LMS.Domain.Entities.LeaveBalance", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<decimal>("Allocated")
+                        .HasColumnType("numeric(5,1)")
+                        .HasColumnName("allocated");
+
+                    b.Property<decimal>("Balance")
+                        .HasColumnType("numeric(5,1)")
+                        .HasColumnName("balance");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("LeaveTypeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("leave_type_id");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("updated_at");
+
+                    b.Property<decimal>("Used")
+                        .HasColumnType("numeric(5,1)")
+                        .HasColumnName("used");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.Property<int>("Year")
+                        .HasColumnType("integer")
+                        .HasColumnName("year");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex(new[] { "UserId", "LeaveTypeId", "Year" })
+                        .IsUnique()
+                        .HasDatabaseName("ix_leave_balances_user_leavetype_year");
+
+                    b.ToTable("leave_balances");
+                });
+
             modelBuilder.Entity("LMS.Domain.Entities.LeaveType", b =>
                 {
                     b.Property<Guid>("Id")
@@ -318,6 +367,27 @@ namespace LMS.Infrastructure.Migrations
                         .HasDatabaseName("ix_users_manager_id");
 
                     b.ToTable("users");
+                });
+
+            modelBuilder.Entity("LMS.Domain.Entities.LeaveBalance", b =>
+                {
+                    b.HasOne("LMS.Domain.Entities.LeaveType", "LeaveType")
+                        .WithMany()
+                        .HasForeignKey("LeaveTypeId")
+                        .HasConstraintName("fk_leave_balances_leave_types")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("LMS.Domain.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .HasConstraintName("fk_leave_balances_users")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("LeaveType");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("LMS.Domain.Entities.RefreshToken", b =>
