@@ -104,6 +104,8 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IMsalAuthProvider, MsalAuthProvider>();
 builder.Services.AddScoped<IAccountService, AccountService>();
+builder.Services.AddScoped<ILeaveTypeService, LeaveTypeService>();
+builder.Services.AddScoped<IHolidayService, HolidayService>();
 
 // Seeding
 builder.Services.AddHostedService<SeedService>();
