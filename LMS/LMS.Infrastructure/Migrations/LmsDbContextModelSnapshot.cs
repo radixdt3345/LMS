@@ -66,6 +66,54 @@ namespace LMS.Infrastructure.Migrations
                     b.ToTable("departments");
                 });
 
+            modelBuilder.Entity("LMS.Domain.Entities.Holiday", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date")
+                        .HasColumnName("date");
+
+                    b.Property<bool>("IsRecurring")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_recurring")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("name");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("updated_at");
+
+                    b.Property<int>("Year")
+                        .HasColumnType("integer")
+                        .HasColumnName("year");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Date")
+                        .HasDatabaseName("ix_holidays_date");
+
+                    b.HasIndex("Date", "Year")
+                        .IsUnique()
+                        .HasDatabaseName("ix_holidays_date_year");
+
+                    b.ToTable("holidays");
+                });
+
             modelBuilder.Entity("LMS.Domain.Entities.LeaveType", b =>
                 {
                     b.Property<Guid>("Id")
@@ -187,11 +235,21 @@ namespace LMS.Infrastructure.Migrations
                         .HasColumnType("character varying(256)")
                         .HasColumnName("email");
 
+                    b.Property<string>("EmployeeCode")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("employee_code");
+
                     b.Property<short>("FailedLoginCount")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("smallint")
                         .HasColumnName("failed_login_count")
                         .HasDefaultValue((short)0);
+
+                    b.Property<string>("FirstName")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("first_name");
 
                     b.Property<bool>("IsActive")
                         .ValueGeneratedOnAdd()
@@ -199,14 +257,32 @@ namespace LMS.Infrastructure.Migrations
                         .HasColumnName("is_active")
                         .HasDefaultValue(true);
 
+                    b.Property<DateOnly?>("JoinDate")
+                        .HasColumnType("date")
+                        .HasColumnName("join_date");
+
+                    b.Property<string>("LastName")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("last_name");
+
                     b.Property<DateTime?>("LockoutUntil")
                         .HasColumnType("timestamptz")
                         .HasColumnName("lockout_until");
+
+                    b.Property<Guid?>("ManagerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("manager_id");
 
                     b.Property<string>("PasswordHash")
                         .HasMaxLength(512)
                         .HasColumnType("character varying(512)")
                         .HasColumnName("password_hash");
+
+                    b.Property<string>("Phone")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("phone");
 
                     b.Property<short>("Role")
                         .ValueGeneratedOnAdd()
@@ -231,8 +307,15 @@ namespace LMS.Infrastructure.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_users_email");
 
+                    b.HasIndex("EmployeeCode")
+                        .IsUnique()
+                        .HasDatabaseName("ix_users_employee_code");
+
                     b.HasIndex("IsActive")
                         .HasDatabaseName("ix_users_is_active");
+
+                    b.HasIndex("ManagerId")
+                        .HasDatabaseName("ix_users_manager_id");
 
                     b.ToTable("users");
                 });
@@ -256,6 +339,14 @@ namespace LMS.Infrastructure.Migrations
                         .HasForeignKey("DepartmentId")
                         .HasConstraintName("fk_users_departments_department_id")
                         .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("LMS.Domain.Entities.User", "Manager")
+                        .WithMany("DirectReports")
+                        .HasForeignKey("ManagerId")
+                        .HasConstraintName("fk_users_manager")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Manager");
                 });
 
             modelBuilder.Entity("LMS.Domain.Entities.Department", b =>
@@ -265,6 +356,7 @@ namespace LMS.Infrastructure.Migrations
 
             modelBuilder.Entity("LMS.Domain.Entities.User", b =>
                 {
+                    b.Navigation("DirectReports");
                     b.Navigation("RefreshTokens");
                 });
 #pragma warning restore 612, 618

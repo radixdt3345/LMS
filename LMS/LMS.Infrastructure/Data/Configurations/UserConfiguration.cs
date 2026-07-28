@@ -7,6 +7,8 @@ namespace LMS.Infrastructure.Data.Configurations;
 
 /// <summary>
 /// EF Core configuration for the User entity — snake_case columns, UUID PK, timestamptz.
+/// PEOPLE-DB-002 adds: first_name, last_name, phone, join_date, manager_id, employee_code
+/// plus a self-referencing FK for manager hierarchy.
 /// </summary>
 public class UserConfiguration : IEntityTypeConfiguration<User>
 {
@@ -52,6 +54,30 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
             .HasColumnName("lockout_until")
             .HasColumnType("timestamptz");
 
+        // Profile columns (PEOPLE-DB-002, FR-12 to FR-20)
+        builder.Property(u => u.FirstName)
+            .HasColumnName("first_name")
+            .HasMaxLength(100);
+
+        builder.Property(u => u.LastName)
+            .HasColumnName("last_name")
+            .HasMaxLength(100);
+
+        builder.Property(u => u.Phone)
+            .HasColumnName("phone")
+            .HasMaxLength(20);
+
+        builder.Property(u => u.JoinDate)
+            .HasColumnName("join_date")
+            .HasColumnType("date");
+
+        builder.Property(u => u.ManagerId)
+            .HasColumnName("manager_id");
+
+        builder.Property(u => u.EmployeeCode)
+            .HasColumnName("employee_code")
+            .HasMaxLength(20);
+
         builder.Property(u => u.CreatedAt)
             .HasColumnName("created_at")
             .HasColumnType("timestamptz")
@@ -61,6 +87,14 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
             .HasColumnName("updated_at")
             .HasColumnType("timestamptz")
             .IsRequired();
+
+        // Self-referencing FK: manager_id → users.id (nullable, SetNull on delete)
+        // No-manager rule: manager_id IS NULL means HR Admin handles L1+L2 (CLAUDE.md)
+        builder.HasOne(u => u.Manager)
+            .WithMany(u => u.DirectReports)
+            .HasForeignKey(u => u.ManagerId)
+            .HasConstraintName("fk_users_manager")
+            .OnDelete(DeleteBehavior.SetNull);
 
         // Indexes
         builder.HasIndex(u => u.Email)
@@ -76,5 +110,13 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
 
         builder.HasIndex(u => u.IsActive)
             .HasDatabaseName("ix_users_is_active");
+
+        builder.HasIndex(u => u.ManagerId)
+            .HasDatabaseName("ix_users_manager_id");
+
+        // Unique on employee_code — PostgreSQL allows multiple NULLs in a unique index
+        builder.HasIndex(u => u.EmployeeCode)
+            .IsUnique()
+            .HasDatabaseName("ix_users_employee_code");
     }
 }
