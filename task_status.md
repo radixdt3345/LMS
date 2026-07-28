@@ -1,5 +1,5 @@
 # Task Status — LMS V5
-Updated: 2026-07-27 | Phase: Wave 2
+Updated: 2026-07-28 | Phase: Wave 3
 
 | Task ID | Issue ID | Type | Status | GitHub Issue | Blocked By |
 |---------|----------|------|--------|-------------|------------|
@@ -29,7 +29,7 @@ Updated: 2026-07-27 | Phase: Wave 2
 | T-024 | PEOPLE-INT-002 | Development | PENDING | #68 | T-022,T-023 |
 | T-025 | PEOPLE-TEST-002 | Testing | PENDING | #18 | T-024 |
 | T-026 | LEAVECORE-DB-001 | Development | PENDING | #19 | T-013 |
-| T-027 | LEAVECORE-API-001 | Development | PENDING | #20 | T-026 |
+| T-027 | LEAVECORE-API-001 | Development | COMPLETE | #20 | T-026 |
 | T-028 | LEAVECORE-UI-001 | Development | PENDING | #21 | T-027 |
 | T-029 | LEAVECORE-INT-001 | Development | PENDING | #22 | T-027,T-028 |
 | T-030 | LEAVECORE-TEST-001 | Testing | PENDING | #23 | T-029 |
@@ -39,7 +39,7 @@ Updated: 2026-07-27 | Phase: Wave 2
 | T-034 | LEAVECORE-INT-002 | Testing | PENDING | #26 | T-032,T-033 |
 | T-035 | LEAVECORE-TEST-002 | Testing | PENDING | #27 | T-034 |
 | T-036 | LEAVECORE-DB-003 | Development | PENDING | #28 | T-013 |
-| T-037 | LEAVECORE-API-003 | Development | PENDING | #29 | T-036 |
+| T-037 | LEAVECORE-API-003 | Development | COMPLETE | #29 | T-036 |
 | T-038 | LEAVECORE-UI-003 | Development | PENDING | #30 | T-037 |
 | T-039 | LEAVECORE-INT-003 | Testing | PENDING | #31 | T-037,T-038 |
 | T-040 | LEAVECORE-TEST-003 | Testing | PENDING | #32 | T-039 |
