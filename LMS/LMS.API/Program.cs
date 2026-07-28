@@ -99,6 +99,9 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
+// In-memory cache — used by DepartmentService (1h TTL on active department list)
+builder.Services.AddMemoryCache();
+
 // Application services
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<ITokenService, TokenService>();
@@ -106,6 +109,7 @@ builder.Services.AddScoped<IMsalAuthProvider, MsalAuthProvider>();
 builder.Services.AddScoped<IAccountService, AccountService>();
 builder.Services.AddScoped<ILeaveTypeService, LeaveTypeService>();
 builder.Services.AddScoped<IHolidayService, HolidayService>();
+builder.Services.AddScoped<IDepartmentService, DepartmentService>();
 
 // Seeding
 builder.Services.AddHostedService<SeedService>();
