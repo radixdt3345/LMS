@@ -19,11 +19,11 @@ Updated: 2026-07-28 | Phase: Wave 3
 | T-014 | INFRA-TEST-001 | Testing | PENDING | #10 | T-013 |
 | T-015 | INFRA-E2E-001 | E2E | PENDING | #66 | T-014,T-005 |
 | T-016 | PEOPLE-DB-001 | Development | COMPLETE | #11 | T-013 |
-| T-017 | PEOPLE-API-001 | Development | PENDING | #12 | T-016 |
+| T-017 | PEOPLE-API-001 | Development | COMPLETE | #12 | T-016 |
 | T-018 | PEOPLE-UI-001 | Development | PENDING | #13 | T-017 |
 | T-019 | PEOPLE-INT-001 | Development | PENDING | #67 | T-017,T-018 |
 | T-020 | PEOPLE-TEST-001 | Testing | PENDING | #14 | T-019 |
-| T-021 | PEOPLE-DB-002 | Development | PENDING | #15 | T-016 |
+| T-021 | PEOPLE-DB-002 | Development | COMPLETE | #15 | T-016 |
 | T-022 | PEOPLE-API-002 | Development | PENDING | #16 | T-021 |
 | T-023 | PEOPLE-UI-002 | Development | PENDING | #17 | T-022 |
 | T-024 | PEOPLE-INT-002 | Development | PENDING | #68 | T-022,T-023 |
