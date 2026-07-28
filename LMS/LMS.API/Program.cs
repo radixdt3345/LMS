@@ -110,6 +110,8 @@ builder.Services.AddScoped<IAccountService, AccountService>();
 builder.Services.AddScoped<ILeaveTypeService, LeaveTypeService>();
 builder.Services.AddScoped<IHolidayService, HolidayService>();
 builder.Services.AddScoped<IDepartmentService, DepartmentService>();
+builder.Services.AddScoped<IAuditService, AuditService>();
+builder.Services.AddScoped<IEmployeeService, EmployeeService>();
 
 // Seeding
 builder.Services.AddHostedService<SeedService>();
