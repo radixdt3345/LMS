@@ -2,12 +2,15 @@ namespace LMS.Application.DTOs.People;
 
 /// <summary>
 /// Response DTO returned by department endpoints.
+/// EmployeeCount reflects the number of active employees currently assigned
+/// to this department — computed at query time, not stored.
 /// </summary>
 public record DepartmentResponse(
     Guid Id,
     string Name,
     string? Description,
     bool IsActive,
+    int EmployeeCount,
     DateTime CreatedAt,
     DateTime UpdatedAt);
 
