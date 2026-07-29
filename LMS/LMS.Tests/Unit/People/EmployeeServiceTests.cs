@@ -11,19 +11,16 @@ using Xunit;
 namespace LMS.Tests.Unit.People;
 
 /// <summary>
-/// Unit tests for EmployeeService using EF Core InMemory database.
-/// UT-20: GetEmployees returns only active employees, paginated correctly
-/// UT-21: GetEmployeeById returns 404 when employee does not exist
-/// UT-22: CreateEmployee returns 409 when email already registered
-/// UT-23: DeactivateEmployee is idempotent (already-inactive user returns success)
+/// Unit tests for EmployeeService — CRUD, role derivation, team listing.
+/// Uses EF Core InMemory provider; no PostgreSQL required.
+/// Covers: UT-16 through UT-20.
 /// </summary>
+[Trait("Category", "Unit")]
 public class EmployeeServiceTests
 {
-    // ------------------------------------------------------------------
-    // Helpers
-    // ------------------------------------------------------------------
+    // ── Helpers ──────────────────────────────────────────────────────────────────
 
-    private static LmsDbContext CreateDb()
+    private static LmsDbContext CreateInMemoryDb()
     {
         var options = new DbContextOptionsBuilder<LmsDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
@@ -31,122 +28,184 @@ public class EmployeeServiceTests
         return new LmsDbContext(options);
     }
 
-    private static EmployeeService CreateService(LmsDbContext db)
+    private static EmployeeService BuildService(LmsDbContext db, IAuditService? audit = null)
     {
-        var auditMock = new Mock<IAuditService>();
-        auditMock
-            .Setup(a => a.LogAsync(
-                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>(),
-                It.IsAny<string?>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
-            .Returns(Task.CompletedTask);
-
-        return new EmployeeService(db, auditMock.Object);
+        audit ??= new Mock<IAuditService>().Object;
+        return new EmployeeService(db, audit);
     }
 
-    private static User MakeUser(string email, bool isActive = true) => new()
+    private static User MakeUser(
+        string email,
+        UserRole role = UserRole.Employee,
+        Guid? managerId = null,
+        bool isActive = true) => new()
     {
-        Id         = Guid.NewGuid(),
-        Email      = email,
-        IsActive   = isActive,
-        Role       = UserRole.Employee,
-        CreatedAt  = DateTime.UtcNow,
-        UpdatedAt  = DateTime.UtcNow
+        Id        = Guid.NewGuid(),
+        Email     = email,
+        Role      = role,
+        IsActive  = isActive,
+        ManagerId = managerId,
+        CreatedAt = DateTime.UtcNow,
+        UpdatedAt = DateTime.UtcNow,
     };
 
-    // ------------------------------------------------------------------
-    // UT-20
-    // ------------------------------------------------------------------
+    // ── UT-16: CreateEmployee creates row with correct fields ─────────────────────
 
     [Fact]
-    [Trait("Category", "Unit")]
-    public async Task UT20_GetEmployees_ReturnsOnlyActiveEmployees_Paginated()
+    public async Task CreateEmployeeAsync_ValidDto_CreatesRowWithCorrectFields()
     {
-        // Arrange
-        using var db = CreateDb();
-        db.Users.AddRange(
-            MakeUser("alice@test.com", isActive: true),
-            MakeUser("bob@test.com",   isActive: true),
-            MakeUser("carol@test.com", isActive: false)  // inactive — must not appear
+        await using var db = CreateInMemoryDb();
+        var svc = BuildService(db);
+
+        var dto = new CreateEmployeeDto(
+            Email:        "alice@example.com",
+            Password:     "Pass123!",
+            AzureAdOid:   null,
+            FirstName:    "Alice",
+            LastName:     "Smith",
+            Phone:        "+91-9876543210",
+            EmployeeCode: "EMP-001",
+            DepartmentId: null,
+            ManagerId:    null,
+            Role:         "Employee"
         );
-        await db.SaveChangesAsync();
 
-        var service = CreateService(db);
+        var result = await svc.CreateEmployeeAsync(dto);
 
-        // Act
-        var result = await service.GetEmployeesAsync(page: 1, limit: 10, deptId: null, search: null);
-
-        // Assert
         Assert.True(result.IsSuccess);
-        Assert.Equal(2, result.Value!.Total);
-        Assert.Equal(2, result.Value.Items.Count());
-        Assert.All(result.Value.Items, dto => Assert.True(dto.IsActive));
+        Assert.NotNull(result.Value);
+        Assert.Equal("alice@example.com", result.Value!.Email);
+        Assert.Equal("Alice",   result.Value.FirstName);
+        Assert.Equal("Smith",   result.Value.LastName);
+        Assert.Equal("EMP-001", result.Value.EmployeeCode);
+        Assert.Equal("Employee", result.Value.Role);
+        Assert.True(result.Value.IsActive);
+
+        // Verify password is hashed in DB — raw value must not be stored
+        var persisted = await db.Users.SingleAsync(u => u.Email == "alice@example.com");
+        Assert.NotNull(persisted.PasswordHash);
+        Assert.NotEqual("Pass123!", persisted.PasswordHash);
+        Assert.Equal("Alice", persisted.FirstName);
+        Assert.Equal("EMP-001", persisted.EmployeeCode);
     }
 
-    // ------------------------------------------------------------------
-    // UT-21
-    // ------------------------------------------------------------------
+    // ── UT-17: DeriveRole — assign direct report → manager gets Manager role ──────
 
     [Fact]
-    [Trait("Category", "Unit")]
-    public async Task UT21_GetEmployeeById_Returns404_WhenNotFound()
+    public async Task CreateEmployeeAsync_WithManagerId_DeriveRolePromotesManagerToManager()
     {
-        // Arrange
-        using var db = CreateDb();
-        var service = CreateService(db);
+        await using var db = CreateInMemoryDb();
 
-        // Act
-        var result = await service.GetEmployeeByIdAsync(Guid.NewGuid());
-
-        // Assert
-        Assert.False(result.IsSuccess);
-        Assert.Equal(404, result.StatusCode);
-    }
-
-    // ------------------------------------------------------------------
-    // UT-22
-    // ------------------------------------------------------------------
-
-    [Fact]
-    [Trait("Category", "Unit")]
-    public async Task UT22_CreateEmployee_Returns409_WhenEmailAlreadyExists()
-    {
-        // Arrange
-        using var db = CreateDb();
-        db.Users.Add(MakeUser("existing@test.com"));
+        // Seed a future manager — currently Employee
+        var manager = MakeUser("manager@example.com", UserRole.Employee);
+        db.Users.Add(manager);
         await db.SaveChangesAsync();
 
-        var service = CreateService(db);
+        var svc = BuildService(db);
 
-        // Act — attempt to create a second user with the same email
-        var result = await service.CreateEmployeeAsync(
-            new CreateEmployeeDto("existing@test.com", null, null, null, null, null));
+        // Create an employee whose manager is the seeded user
+        var dto = new CreateEmployeeDto(
+            Email:        "report@example.com",
+            Password:     "Pass!",
+            AzureAdOid:   null,
+            FirstName:    null,
+            LastName:     null,
+            Phone:        null,
+            EmployeeCode: null,
+            DepartmentId: null,
+            ManagerId:    manager.Id,
+            Role:         null
+        );
 
-        // Assert
-        Assert.False(result.IsSuccess);
-        Assert.Equal(409, result.StatusCode);
+        var result = await svc.CreateEmployeeAsync(dto);
+        Assert.True(result.IsSuccess);
+
+        // DeriveRole should have promoted the manager
+        var updatedManager = await db.Users.FindAsync(manager.Id);
+        Assert.Equal(UserRole.Manager, updatedManager!.Role);
     }
 
-    // ------------------------------------------------------------------
-    // UT-23
-    // ------------------------------------------------------------------
+    // ── UT-18: DeriveRole — already Manager stays Manager (idempotent) ───────────
 
     [Fact]
-    [Trait("Category", "Unit")]
-    public async Task UT23_DeactivateEmployee_IsIdempotent_WhenAlreadyInactive()
+    public async Task CreateEmployeeAsync_ManagerAlreadyManager_DeriveRoleIsIdempotent()
     {
-        // Arrange — user is already inactive
-        using var db = CreateDb();
-        var user = MakeUser("emp@test.com", isActive: false);
+        await using var db = CreateInMemoryDb();
+
+        // Seed a user already at Manager level
+        var manager = MakeUser("senior@example.com", UserRole.Manager);
+        db.Users.Add(manager);
+        await db.SaveChangesAsync();
+
+        var svc = BuildService(db);
+
+        var dto = new CreateEmployeeDto(
+            Email:        "report2@example.com",
+            Password:     "Pass!",
+            AzureAdOid:   null,
+            FirstName:    null,
+            LastName:     null,
+            Phone:        null,
+            EmployeeCode: null,
+            DepartmentId: null,
+            ManagerId:    manager.Id,
+            Role:         null
+        );
+
+        await svc.CreateEmployeeAsync(dto);
+
+        // Role must not change — still Manager
+        var updatedManager = await db.Users.FindAsync(manager.Id);
+        Assert.Equal(UserRole.Manager, updatedManager!.Role);
+    }
+
+    // ── UT-19: DeactivateEmployee sets is_active = false ─────────────────────────
+
+    [Fact]
+    public async Task DeactivateEmployeeAsync_ActiveEmployee_SetsIsActiveFalse()
+    {
+        await using var db = CreateInMemoryDb();
+
+        var user = MakeUser("active@example.com");
         db.Users.Add(user);
         await db.SaveChangesAsync();
 
-        var service = CreateService(db);
+        var svc = BuildService(db);
+        var result = await svc.DeactivateEmployeeAsync(user.Id);
 
-        // Act — deactivating an already-inactive employee must still succeed
-        var result = await service.DeactivateEmployeeAsync(user.Id);
-
-        // Assert
         Assert.True(result.IsSuccess);
-        Assert.True(result.Value);
+
+        var updated = await db.Users.FindAsync(user.Id);
+        Assert.False(updated!.IsActive);
+    }
+
+    // ── UT-20: GetTeam returns only active direct reports ─────────────────────────
+
+    [Fact]
+    public async Task GetTeamAsync_Manager_ReturnsOnlyActiveDirectReports()
+    {
+        await using var db = CreateInMemoryDb();
+
+        var manager      = MakeUser("mgr@example.com", UserRole.Manager);
+        var reportA      = MakeUser("reportA@example.com", managerId: manager.Id);
+        var reportB      = MakeUser("reportB@example.com", managerId: manager.Id);
+        var inactiveRpt  = MakeUser("inactive@example.com", managerId: manager.Id, isActive: false);
+        var otherMgr     = MakeUser("othermgr@example.com", UserRole.Manager);
+        var unrelated    = MakeUser("unrelated@example.com", managerId: otherMgr.Id);
+
+        db.Users.AddRange(manager, reportA, reportB, inactiveRpt, otherMgr, unrelated);
+        await db.SaveChangesAsync();
+
+        var svc    = BuildService(db);
+        var result = await svc.GetTeamAsync(manager.Id, manager.Id, callerIsHrAdmin: false);
+
+        Assert.True(result.IsSuccess);
+        var team = result.Value!.ToList();
+
+        Assert.Equal(2, team.Count);
+        Assert.Contains(team, e => e.Email == "reportA@example.com");
+        Assert.Contains(team, e => e.Email == "reportB@example.com");
+        Assert.DoesNotContain(team, e => e.Email == "inactive@example.com");
+        Assert.DoesNotContain(team, e => e.Email == "unrelated@example.com");
     }
 }

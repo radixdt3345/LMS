@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using LMS.Application.DTOs.People;
 using LMS.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -7,8 +8,7 @@ namespace LMS.API.Controllers;
 
 /// <summary>
 /// Employee management endpoints. FR-12 to FR-20.
-/// GET /api/v1/employees (list) and GET /api/v1/employees/{id} require HRAdmin or SuperAdmin.
-/// POST / PUT / DELETE also require HRAdmin or SuperAdmin.
+/// /me routes must be declared before {id:guid} to avoid ambiguity.
 /// </summary>
 [ApiController]
 [Route("api/v1/employees")]
@@ -22,9 +22,52 @@ public class EmployeeController : ControllerBase
         _employees = employees;
     }
 
+    // ─── Self-service /me endpoints (declared before {id:guid}) ─────────────────
+
+    /// <summary>
+    /// GET /api/v1/employees/me
+    /// Returns the authenticated user's own profile. Available to any authenticated user.
+    /// </summary>
+    [HttpGet("me")]
+    public async Task<IActionResult> GetMyProfile(CancellationToken ct)
+    {
+        var userId = GetCallerId();
+        if (userId == Guid.Empty)
+            return Unauthorized(new { success = false, error = new { message = "Invalid token." } });
+
+        var result = await _employees.GetMyProfileAsync(userId, ct);
+        if (!result.IsSuccess)
+            return StatusCode(result.StatusCode,
+                new { success = false, error = new { message = result.Error } });
+
+        return Ok(new { success = true, data = result.Value });
+    }
+
+    /// <summary>
+    /// PUT /api/v1/employees/me
+    /// Self-service profile update. Only firstName, lastName, and phone are mutable. FR-14.
+    /// </summary>
+    [HttpPut("me")]
+    public async Task<IActionResult> UpdateMyProfile(
+        [FromBody] UpdateMyProfileDto dto, CancellationToken ct)
+    {
+        var userId = GetCallerId();
+        if (userId == Guid.Empty)
+            return Unauthorized(new { success = false, error = new { message = "Invalid token." } });
+
+        var result = await _employees.UpdateMyProfileAsync(userId, dto, ct);
+        if (!result.IsSuccess)
+            return StatusCode(result.StatusCode,
+                new { success = false, error = new { message = result.Error } });
+
+        return Ok(new { success = true, data = result.Value });
+    }
+
+    // ─── Standard CRUD ───────────────────────────────────────────────────────────
+
     /// <summary>
     /// GET /api/v1/employees?page=1&amp;limit=20&amp;departmentId=&amp;search=
-    /// Returns paginated active employees. Optional departmentId filter and free-text search.
+    /// Paginated active employee list. HRAdmin and SuperAdmin only. FR-12.
     /// </summary>
     [HttpGet]
     [Authorize(Roles = "HRAdmin,SuperAdmin")]
@@ -46,7 +89,7 @@ public class EmployeeController : ControllerBase
 
     /// <summary>
     /// GET /api/v1/employees/{id}
-    /// Returns a single employee by ID. Returns 404 when not found.
+    /// Returns a single employee by ID. Returns 404 when not found. FR-12.
     /// </summary>
     [HttpGet("{id:guid}")]
     [Authorize(Roles = "HRAdmin,SuperAdmin")]
@@ -61,8 +104,31 @@ public class EmployeeController : ControllerBase
     }
 
     /// <summary>
+    /// GET /api/v1/employees/{id}/team
+    /// Returns active direct reports of the specified manager.
+    /// Caller must be the manager themselves or HRAdmin/SuperAdmin. FR-20.
+    /// </summary>
+    [HttpGet("{id:guid}/team")]
+    [Authorize(Roles = "Manager,HRAdmin,SuperAdmin")]
+    public async Task<IActionResult> GetTeam(Guid id, CancellationToken ct)
+    {
+        var callerId = GetCallerId();
+        if (callerId == Guid.Empty)
+            return Unauthorized(new { success = false, error = new { message = "Invalid token." } });
+
+        var callerIsHrAdmin = User.IsInRole("HRAdmin") || User.IsInRole("SuperAdmin");
+        var result = await _employees.GetTeamAsync(id, callerId, callerIsHrAdmin, ct);
+
+        if (!result.IsSuccess)
+            return StatusCode(result.StatusCode,
+                new { success = false, error = new { message = result.Error } });
+
+        return Ok(new { success = true, data = result.Value });
+    }
+
+    /// <summary>
     /// POST /api/v1/employees
-    /// Creates a new employee. Returns 409 if email is already registered. FR-13.
+    /// Creates a new employee. Returns 409 if email already registered. FR-13.
     /// </summary>
     [HttpPost]
     [Authorize(Roles = "HRAdmin,SuperAdmin")]
@@ -96,7 +162,7 @@ public class EmployeeController : ControllerBase
 
     /// <summary>
     /// DELETE /api/v1/employees/{id}
-    /// Soft-deletes (deactivates) an employee. Idempotent. Returns 404 when not found. FR-15.
+    /// Soft-deactivates an employee (is_active = false). Idempotent. FR-15.
     /// </summary>
     [HttpDelete("{id:guid}")]
     [Authorize(Roles = "HRAdmin,SuperAdmin")]
@@ -107,6 +173,16 @@ public class EmployeeController : ControllerBase
             return StatusCode(result.StatusCode,
                 new { success = false, error = new { message = result.Error } });
 
-        return Ok(new { success = true });
+        return NoContent();
+    }
+
+    // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+    /// <summary>Extracts the caller's user ID from the JWT sub claim.</summary>
+    private Guid GetCallerId()
+    {
+        var raw = User.FindFirst(ClaimTypes.NameIdentifier)?.Value
+               ?? User.FindFirst("sub")?.Value;
+        return Guid.TryParse(raw, out var id) ? id : Guid.Empty;
     }
 }

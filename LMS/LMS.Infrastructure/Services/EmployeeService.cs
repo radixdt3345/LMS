@@ -116,7 +116,16 @@ public class EmployeeService : IEmployeeService
             return Result<EmployeeDto>.Failure(
                 $"An employee with email '{dto.Email}' already exists.", 409);
 
-        // Parse role; default to Employee when omitted or unrecognised
+        // Enforce unique employee_code when provided
+        if (!string.IsNullOrWhiteSpace(dto.EmployeeCode))
+        {
+            var codeExists = await _db.Users
+                .AnyAsync(u => u.EmployeeCode == dto.EmployeeCode.Trim(), ct);
+            if (codeExists)
+                return Result<EmployeeDto>.Failure(
+                    $"Employee code '{dto.EmployeeCode}' is already in use.", 409);
+        }
+
         var role = UserRole.Employee;
         if (!string.IsNullOrWhiteSpace(dto.Role))
             Enum.TryParse<UserRole>(dto.Role, ignoreCase: true, out role);
@@ -132,6 +141,10 @@ public class EmployeeService : IEmployeeService
             Email        = dto.Email.Trim(),
             PasswordHash = passwordHash,
             AzureAdOid   = dto.AzureAdOid?.Trim(),
+            FirstName    = dto.FirstName?.Trim(),
+            LastName     = dto.LastName?.Trim(),
+            Phone        = dto.Phone?.Trim(),
+            EmployeeCode = dto.EmployeeCode?.Trim(),
             DepartmentId = dto.DepartmentId,
             ManagerId    = dto.ManagerId,
             Role         = role,
@@ -142,6 +155,10 @@ public class EmployeeService : IEmployeeService
 
         _db.Users.Add(user);
         await _db.SaveChangesAsync(ct);
+
+        // DeriveRole: if this employee is assigned a manager, update that manager's role
+        if (dto.ManagerId.HasValue)
+            await DeriveRoleAsync(dto.ManagerId.Value, ct);
 
         await _audit.LogAsync("User", user.Id.ToString(), "Create", null,
             $"Created employee {user.Email}", ct);
@@ -157,6 +174,8 @@ public class EmployeeService : IEmployeeService
 
         if (user is null)
             return Result<EmployeeDto>.Failure("Employee not found.", 404);
+
+        var oldManagerId = user.ManagerId;
 
         if (dto.FirstName    is not null) user.FirstName    = dto.FirstName.Trim();
         if (dto.LastName     is not null) user.LastName     = dto.LastName.Trim();
@@ -175,7 +194,14 @@ public class EmployeeService : IEmployeeService
         await _audit.LogAsync("User", user.Id.ToString(), "Update", null,
             $"Updated employee {user.Email}", ct);
 
-        // Fetch dept name for updated record
+        // DeriveRole: on manager_id change, run DeriveRole on both old and new manager
+        if (dto.ManagerId is not null && dto.ManagerId.Value != oldManagerId)
+        {
+            if (oldManagerId.HasValue)
+                await DeriveRoleAsync(oldManagerId.Value, ct);
+            await DeriveRoleAsync(dto.ManagerId.Value, ct);
+        }
+
         string? deptName = null;
         if (user.DepartmentId.HasValue)
         {
@@ -210,14 +236,108 @@ public class EmployeeService : IEmployeeService
         return Result<bool>.Success(true);
     }
 
+    /// <inheritdoc />
+    public async Task<Result<IEnumerable<EmployeeDto>>> GetTeamAsync(
+        Guid managerId, Guid callerId, bool callerIsHrAdmin, CancellationToken ct = default)
+    {
+        // Caller must be the manager themselves or an HR Admin / Super Admin
+        if (!callerIsHrAdmin && callerId != managerId)
+            return Result<IEnumerable<EmployeeDto>>.Failure(
+                "Access denied. You can only view your own team.", 403);
+
+        var reports = await _db.Users.AsNoTracking()
+            .Where(u => u.ManagerId == managerId && u.IsActive)
+            .ToListAsync(ct);
+
+        var deptIds = reports
+            .Where(u => u.DepartmentId.HasValue)
+            .Select(u => u.DepartmentId!.Value)
+            .Distinct()
+            .ToList();
+
+        var deptMap = deptIds.Count > 0
+            ? await _db.Departments.AsNoTracking()
+                .Where(d => deptIds.Contains(d.Id))
+                .ToDictionaryAsync(d => d.Id, d => d.Name, ct)
+            : new Dictionary<Guid, string>();
+
+        var items = reports.Select(u => MapToDto(u,
+            u.DepartmentId.HasValue ? deptMap.GetValueOrDefault(u.DepartmentId.Value) : null));
+
+        return Result<IEnumerable<EmployeeDto>>.Success(items);
+    }
+
+    /// <inheritdoc />
+    public async Task<Result<EmployeeDto>> GetMyProfileAsync(
+        Guid userId, CancellationToken ct = default)
+        => await GetEmployeeByIdAsync(userId, ct);
+
+    /// <inheritdoc />
+    public async Task<Result<EmployeeDto>> UpdateMyProfileAsync(
+        Guid userId, UpdateMyProfileDto dto, CancellationToken ct = default)
+    {
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
+        if (user is null)
+            return Result<EmployeeDto>.Failure("Employee not found.", 404);
+
+        if (dto.FirstName is not null) user.FirstName = dto.FirstName.Trim();
+        if (dto.LastName  is not null) user.LastName  = dto.LastName.Trim();
+        if (dto.Phone     is not null) user.Phone     = dto.Phone.Trim();
+
+        user.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(ct);
+
+        await _audit.LogAsync("User", user.Id.ToString(), "SelfUpdate", user.Id.ToString(),
+            $"Self-updated profile for {user.Email}", ct);
+
+        string? deptName = null;
+        if (user.DepartmentId.HasValue)
+        {
+            deptName = await _db.Departments.AsNoTracking()
+                .Where(d => d.Id == user.DepartmentId.Value)
+                .Select(d => d.Name)
+                .FirstOrDefaultAsync(ct);
+        }
+
+        return Result<EmployeeDto>.Success(MapToDto(user, deptName));
+    }
+
     // ------------------------------------------------------------------
     // Private helpers
     // ------------------------------------------------------------------
+
+    /// <summary>
+    /// Idempotently elevates <paramref name="userId"/> to Manager if they have at least one
+    /// active direct report. Already-Manager (or higher) users are never demoted — no-op.
+    /// PEOPLE domain rule: any active employee with manager_id pointing here → role = Manager.
+    /// </summary>
+    private async Task DeriveRoleAsync(Guid userId, CancellationToken ct)
+    {
+        var manager = await _db.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
+        if (manager is null) return;
+
+        // Only promote Employee; never touch Manager/HRAdmin/SuperAdmin roles
+        if (manager.Role != UserRole.Employee) return;
+
+        var hasReports = await _db.Users
+            .AnyAsync(u => u.ManagerId == userId && u.IsActive, ct);
+
+        if (hasReports)
+        {
+            manager.Role      = UserRole.Manager;
+            manager.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync(ct);
+        }
+    }
 
     private static EmployeeDto MapToDto(User user, string? deptName) =>
         new(
             user.Id,
             user.Email,
+            user.FirstName,
+            user.LastName,
+            user.Phone,
+            user.EmployeeCode,
             user.Role.ToString(),
             user.DepartmentId,
             deptName,
