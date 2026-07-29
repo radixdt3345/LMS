@@ -1,35 +1,72 @@
 using LMS.Application.Interfaces;
+using LMS.Domain.Entities;
+using LMS.Infrastructure.Data;
 using Microsoft.Extensions.Logging;
+using System.Text.Json;
 
 namespace LMS.Infrastructure.Services;
 
 /// <summary>
-/// Stub audit service — logs to ILogger<AuditService> until the REPORTING domain
-/// implements the full audit_log table (append-only, immutable per UT-56).
-/// Replace this implementation — do not extend it — when the REPORTING issue lands.
+/// Real EF Core-backed implementation of <see cref="IAuditService"/>.
+/// Every call to <see cref="LogAsync"/> inserts a row into <c>audit_logs</c>;
+/// structured logging accompanies every write for observability.
+/// <para>
+/// <strong>Delete is permanently forbidden.</strong>
+/// <see cref="Delete"/> throws <see cref="InvalidOperationException"/> and makes
+/// no database call whatsoever (UT-56, IT-50).
+/// </para>
 /// </summary>
 public class AuditService : IAuditService
 {
+    private readonly LmsDbContext _context;
     private readonly ILogger<AuditService> _logger;
 
-    public AuditService(ILogger<AuditService> logger)
+    /// <summary>Initialises the service with a DB context and logger.</summary>
+    public AuditService(LmsDbContext context, ILogger<AuditService> logger)
     {
+        _context = context;
         _logger = logger;
     }
 
     /// <inheritdoc />
-    public Task LogAsync(
-        string entityType,
-        string entityId,
+    public async Task LogAsync(
         string action,
-        string? userId,
-        string? details,
-        CancellationToken ct = default)
+        string entityType,
+        Guid entityId,
+        Guid actorId,
+        object? oldValue = null,
+        object? newValue = null)
     {
-        _logger.LogInformation(
-            "[AUDIT] {EntityType} {EntityId} — {Action} by {UserId}. {Details}",
-            entityType, entityId, action, userId ?? "system", details);
+        var entry = new AuditLog
+        {
+            Id = Guid.NewGuid(),
+            Action = action,
+            EntityType = entityType,
+            EntityId = entityId,
+            ActorId = actorId,
+            OldValue = oldValue is null ? null : JsonSerializer.Serialize(oldValue),
+            NewValue = newValue is null ? null : JsonSerializer.Serialize(newValue),
+            CreatedAt = DateTime.UtcNow
+        };
 
-        return Task.CompletedTask;
+        _context.AuditLogs.Add(entry);
+        await _context.SaveChangesAsync();
+
+        _logger.LogInformation(
+            "Audit: {Action} on {EntityType}/{EntityId} by actor {ActorId} at {CreatedAt}",
+            action, entityType, entityId, actorId, entry.CreatedAt);
+    }
+
+    /// <inheritdoc />
+    /// <exception cref="InvalidOperationException">
+    /// Always thrown. Audit logs are immutable — delete is not permitted.
+    /// No database call is made.
+    /// </exception>
+    public void Delete(Guid id)
+    {
+        // CRITICAL: NO database call is permitted here (UT-56, IT-50).
+        // This throw is unconditional and intentional.
+        throw new InvalidOperationException(
+            "Audit log is immutable — delete is not permitted");
     }
 }

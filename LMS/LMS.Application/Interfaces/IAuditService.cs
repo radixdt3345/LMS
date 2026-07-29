@@ -1,26 +1,33 @@
 namespace LMS.Application.Interfaces;
 
 /// <summary>
-/// Audit service interface — records state-change events for domain mutations.
-/// Full persistence implementation lives in the REPORTING domain issue.
-/// Every service that mutates domain state must call LogAsync (CONSTITUTION Art II).
+/// Contract for the domain audit service.
+/// All mutations in domain services must call <see cref="LogAsync"/> on state change.
 /// </summary>
 public interface IAuditService
 {
     /// <summary>
-    /// Records an audit event. Fire-and-forget in production; awaited in tests.
+    /// Writes an audit record to the database.
+    /// This method must be called by every domain service on every state change.
     /// </summary>
-    /// <param name="entityType">Domain entity name, e.g. "User", "LeaveRequest".</param>
-    /// <param name="entityId">String representation of the entity PK (Guid.ToString()).</param>
-    /// <param name="action">Verb: Create, Update, Deactivate, Approve, Reject, etc.</param>
-    /// <param name="userId">Acting user's ID, or null when called by a background job/seed.</param>
-    /// <param name="details">Human-readable summary for the audit log.</param>
-    /// <param name="ct">Cancellation token.</param>
+    /// <param name="action">Verb describing the operation (e.g. "LeaveRequest.Submit").</param>
+    /// <param name="entityType">Domain entity type name (e.g. "LeaveRequest").</param>
+    /// <param name="entityId">UUID of the entity that changed.</param>
+    /// <param name="actorId">UUID of the user who performed the action.</param>
+    /// <param name="oldValue">Entity state before the change; null for creates.</param>
+    /// <param name="newValue">Entity state after the change; null for deletes.</param>
     Task LogAsync(
-        string entityType,
-        string entityId,
         string action,
-        string? userId,
-        string? details,
-        CancellationToken ct = default);
+        string entityType,
+        Guid entityId,
+        Guid actorId,
+        object? oldValue = null,
+        object? newValue = null);
+
+    /// <summary>
+    /// This method MUST throw <see cref="InvalidOperationException"/>.
+    /// Audit logs are immutable — deletion is never permitted (UT-56, IT-50).
+    /// </summary>
+    /// <exception cref="InvalidOperationException">Always thrown. No DB call is made.</exception>
+    void Delete(Guid id);
 }
