@@ -1,8 +1,10 @@
 using LMS.Domain.Entities;
 using LMS.Infrastructure.Data;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
+using System.Reflection;
 using Xunit;
 using LMS.Application.DTOs.People;
 using LMS.Infrastructure.Services;
@@ -48,7 +50,7 @@ public class DepartmentIntegrationTests : IAsyncLifetime
         await _db.DisposeAsync();
     }
 
-    // ── IT-9: Department CRUD ────────────────────────────────────────────────
+    // ── IT-9: Department CRUD ────────────────────────────────────────────
 
     [Fact(DisplayName = "IT-9a: CreateAsync persists department to DB")]
     public async Task CreateAsync_PersistsDepartment()
