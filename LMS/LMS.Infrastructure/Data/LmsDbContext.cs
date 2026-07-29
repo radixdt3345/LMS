@@ -17,6 +17,7 @@ public class LmsDbContext : DbContext
     public DbSet<Holiday> Holidays => Set<Holiday>();
     public DbSet<CompOffRequest> CompOffRequests => Set<CompOffRequest>();
     public DbSet<CompOffCredit> CompOffCredits => Set<CompOffCredit>();
+    public DbSet<Notification> Notifications => Set<Notification>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
