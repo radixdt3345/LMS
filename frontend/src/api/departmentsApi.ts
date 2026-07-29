@@ -1,66 +1,90 @@
-import { apiClient } from './axiosClient'
+import axiosClient from './axiosClient';
 
 export interface Department {
-  id: string
-  name: string
-  description: string | null
-  isActive: boolean
-  employeeCount: number
-  createdAt: string
-  updatedAt: string
+  id: string;
+  name: string;
+  description: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
-export interface CreateDepartmentPayload {
-  name: string
-  description?: string
+export interface CreateDepartmentDto {
+  name: string;
+  description?: string | null;
 }
 
-export interface UpdateDepartmentPayload {
-  name?: string
-  description?: string
-  isActive?: boolean
+export interface UpdateDepartmentDto {
+  name: string;
+  description?: string | null;
 }
 
-const BASE = '/api/v1/departments'
+interface PaginatedData<T> {
+  items: T[];
+  total: number;
+  page: number;
+  limit: number;
+}
 
-export const departmentsApi = {
-  /**
-   * GET /api/v1/departments?includeInactive=true
-   * Returns all departments including inactive ones for the admin view.
-   */
-  getAll: async (includeInactive = true): Promise<Department[]> => {
-    const response = await apiClient.get<{ success: boolean; data: Department[] }>(
-      `${BASE}?includeInactive=${String(includeInactive)}`
-    )
-    return response.data.data
-  },
+interface ApiResponse<T> {
+  success: boolean;
+  data: T;
+}
 
-  /**
-   * POST /api/v1/departments
-   * Creates a new department. Throws on 409 (name conflict).
-   */
-  create: async (payload: CreateDepartmentPayload): Promise<Department> => {
-    const response = await apiClient.post<{ success: boolean; data: Department }>(BASE, payload)
-    return response.data.data
-  },
+/**
+ * GET /api/v1/departments — paginated list of active departments.
+ */
+export async function fetchDepartments(
+  page = 1,
+  limit = 100,
+): Promise<PaginatedData<Department>> {
+  const response = await axiosClient.get<ApiResponse<PaginatedData<Department>>>(
+    '/api/v1/departments',
+    { params: { page, limit } },
+  );
+  return response.data.data;
+}
 
-  /**
-   * PUT /api/v1/departments/{id}
-   * Updates a department. Throws on 409 (name conflict).
-   */
-  update: async (id: string, payload: UpdateDepartmentPayload): Promise<Department> => {
-    const response = await apiClient.put<{ success: boolean; data: Department }>(
-      `${BASE}/${id}`,
-      payload
-    )
-    return response.data.data
-  },
+/**
+ * GET /api/v1/departments/{id}
+ */
+export async function getDepartment(id: string): Promise<Department> {
+  const response = await axiosClient.get<ApiResponse<Department>>(
+    `/api/v1/departments/${id}`,
+  );
+  return response.data.data;
+}
 
-  /**
-   * DELETE /api/v1/departments/{id}
-   * Soft-deletes a department. Throws 409 if employees are still assigned.
-   */
-  delete: async (id: string): Promise<void> => {
-    await apiClient.delete(`${BASE}/${id}`)
-  },
+/**
+ * POST /api/v1/departments
+ */
+export async function createDepartment(
+  dto: CreateDepartmentDto,
+): Promise<Department> {
+  const response = await axiosClient.post<ApiResponse<Department>>(
+    '/api/v1/departments',
+    dto,
+  );
+  return response.data.data;
+}
+
+/**
+ * PUT /api/v1/departments/{id}
+ */
+export async function updateDepartment(
+  id: string,
+  dto: UpdateDepartmentDto,
+): Promise<Department> {
+  const response = await axiosClient.put<ApiResponse<Department>>(
+    `/api/v1/departments/${id}`,
+    dto,
+  );
+  return response.data.data;
+}
+
+/**
+ * DELETE /api/v1/departments/{id} — soft delete (returns 204).
+ */
+export async function deleteDepartment(id: string): Promise<void> {
+  await axiosClient.delete(`/api/v1/departments/${id}`);
 }
