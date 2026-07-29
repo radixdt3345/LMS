@@ -69,7 +69,13 @@ builder.Services.AddAuthorization(options =>
 // -- Application Services ------------------------------------------------------
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<ILeaveTypeService, LeaveTypeService>();
 builder.Services.AddScoped<ILeaveBalanceService, LeaveBalanceService>();
+
+// -- Hangfire job classes (resolved by Hangfire DI activator at job runtime) ---
+builder.Services.AddScoped<NewYearCreditJob>();
+builder.Services.AddScoped<YearEndLapseJob>();
+builder.Services.AddScoped<CompOffExpiryJob>();
 
 // -- Seed Service (idempotent startup seeder) ----------------------------------
 builder.Services.AddHostedService<SeedService>();
