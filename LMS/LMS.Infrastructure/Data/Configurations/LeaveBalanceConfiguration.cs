@@ -7,9 +7,9 @@ namespace LMS.Infrastructure.Data.Configurations;
 /// <summary>
 /// EF Core configuration for LeaveBalance (LEAVECORE-DB-002 / LEAVECORE-API-002).
 /// Maps to the <c>leave_balances</c> table using snake_case column names.
-/// Unique composite index on (user_id, leave_type_id, year) enforces
-/// one balance row per employee per leave type per calendar year.
-/// No carry_forward accumulation — POL-06.
+/// UNIQUE constraint on (user_id, leave_type_id, year) — one record per
+/// employee per leave type per calendar year.
+/// No carry-forward accumulation — POL-06.
 /// </summary>
 public class LeaveBalanceConfiguration : IEntityTypeConfiguration<LeaveBalance>
 {
@@ -32,6 +32,7 @@ public class LeaveBalanceConfiguration : IEntityTypeConfiguration<LeaveBalance>
 
         builder.Property(b => b.Year)
             .HasColumnName("year")
+            .HasColumnType("smallint")
             .IsRequired();
 
         builder.Property(b => b.AllocatedDays)
@@ -62,23 +63,27 @@ public class LeaveBalanceConfiguration : IEntityTypeConfiguration<LeaveBalance>
             .HasColumnType("timestamptz")
             .IsRequired();
 
-        // One balance row per (employee, leave type, year).
+        // UNIQUE: one balance record per employee per leave type per year
         builder.HasIndex(b => new { b.UserId, b.LeaveTypeId, b.Year })
             .IsUnique()
-            .HasDatabaseName("ix_leave_balances_user_type_year");
+            .HasDatabaseName("ix_leave_balances_user_leavetype_year");
 
-        // Fast lookup by user + year.
+        // Fast lookup by user + year
         builder.HasIndex(b => new { b.UserId, b.Year })
             .HasDatabaseName("ix_leave_balances_user_year");
 
+        // FK: user_id → users (Restrict so rows are not silently deleted)
         builder.HasOne(b => b.User)
             .WithMany()
             .HasForeignKey(b => b.UserId)
-            .OnDelete(DeleteBehavior.Cascade);
+            .HasConstraintName("fk_leave_balances_users")
+            .OnDelete(DeleteBehavior.Restrict);
 
+        // FK: leave_type_id → leave_types
         builder.HasOne(b => b.LeaveType)
             .WithMany()
             .HasForeignKey(b => b.LeaveTypeId)
+            .HasConstraintName("fk_leave_balances_leave_types")
             .OnDelete(DeleteBehavior.Restrict);
     }
 }
