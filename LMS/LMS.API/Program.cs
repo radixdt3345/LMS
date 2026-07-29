@@ -36,9 +36,6 @@ var jwtSettings = builder.Configuration.GetSection("JwtSettings").Get<JwtSetting
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
-        // Keep claim types as issued (no Microsoft claim mapping).
-        // "role" claim stays as "role"; "sub" stays as ClaimTypes.NameIdentifier
-        // via the default JwtSecurityTokenHandler mapping.
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer           = true,
@@ -49,7 +46,6 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidAudience            = jwtSettings.Audience,
             IssuerSigningKey         = new SymmetricSecurityKey(
                 Encoding.UTF8.GetBytes(jwtSettings.SecretKey)),
-            // Map the custom "role" claim so [Authorize(Roles=...)] works.
             RoleClaimType            = "role",
         };
     });
@@ -57,7 +53,6 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 // -- Authorization policies ----------------------------------------------------
 builder.Services.AddAuthorization(options =>
 {
-    // HRAdminOrAbove: requires the "role" JWT claim to be HRAdmin or SuperAdmin.
     options.AddPolicy("HRAdminOrAbove", policy =>
         policy.RequireAssertion(ctx =>
         {
@@ -69,6 +64,7 @@ builder.Services.AddAuthorization(options =>
 // -- Application Services ------------------------------------------------------
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IDepartmentService, DepartmentService>();
 builder.Services.AddScoped<ILeaveTypeService, LeaveTypeService>();
 builder.Services.AddScoped<ILeaveBalanceService, LeaveBalanceService>();
 
@@ -130,16 +126,17 @@ app.MapControllers();
 
 app.Run();
 
+// Expose Program for WebApplicationFactory in integration tests
+public partial class Program { }
+
 // ---------------------------------------------------------------------------
 // Hangfire dashboard authorization: requires valid JWT with role=HRAdmin.
-// Placed here (file-scoped) to avoid a separate class file for a small filter.
 // ---------------------------------------------------------------------------
 public class HangfireJwtAuthorizationFilter : IDashboardAuthorizationFilter
 {
     public bool Authorize(DashboardContext context)
     {
         var httpContext = context.GetHttpContext();
-        // User must be authenticated and carry the HRAdmin role claim
         return httpContext.User.Identity?.IsAuthenticated == true
             && httpContext.User.IsInRole("HRAdmin");
     }

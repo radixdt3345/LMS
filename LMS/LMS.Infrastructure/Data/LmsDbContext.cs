@@ -16,6 +16,8 @@ public class LmsDbContext : DbContext
     public DbSet<LeaveType> LeaveTypes => Set<LeaveType>();
     public DbSet<LeaveBalance> LeaveBalances => Set<LeaveBalance>();
     public DbSet<Holiday> Holidays => Set<Holiday>();
+    public DbSet<LeaveRequest> LeaveRequests => Set<LeaveRequest>();
+    public DbSet<ApprovalStep> ApprovalSteps => Set<ApprovalStep>();
     public DbSet<CompOffRequest> CompOffRequests => Set<CompOffRequest>();
     public DbSet<CompOffCredit> CompOffCredits => Set<CompOffCredit>();
     public DbSet<Notification> Notifications => Set<Notification>();
