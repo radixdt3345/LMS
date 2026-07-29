@@ -1,6 +1,9 @@
+using LMS.Application.DTOs.Reporting;
 using LMS.Application.Interfaces;
+using LMS.Domain.Common;
 using LMS.Domain.Entities;
 using LMS.Infrastructure.Data;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
 
@@ -68,5 +71,55 @@ public class AuditService : IAuditService
         // This throw is unconditional and intentional.
         throw new InvalidOperationException(
             "Audit log is immutable — delete is not permitted");
+    }
+
+    /// <inheritdoc />
+    public async Task<Result<PagedResult<AuditLogDto>>> GetAuditLogsAsync(
+        AuditLogQueryDto query, CancellationToken ct = default)
+    {
+        var page = Math.Max(1, query.Page);
+        var limit = Math.Clamp(query.Limit, 1, 100);
+
+        var q = _context.AuditLogs.AsNoTracking().AsQueryable();
+
+        if (query.EntityType is not null)
+            q = q.Where(l => l.EntityType == query.EntityType);
+
+        if (query.EntityId.HasValue)
+            q = q.Where(l => l.EntityId == query.EntityId.Value);
+
+        if (query.ActorId.HasValue)
+            q = q.Where(l => l.ActorId == query.ActorId.Value);
+
+        if (query.From.HasValue)
+            q = q.Where(l => l.CreatedAt >= query.From.Value);
+
+        if (query.To.HasValue)
+            q = q.Where(l => l.CreatedAt <= query.To.Value);
+
+        var total = await q.CountAsync(ct);
+
+        var items = await q
+            .OrderByDescending(l => l.CreatedAt)
+            .Skip((page - 1) * limit)
+            .Take(limit)
+            .Select(l => new AuditLogDto(
+                l.Id,
+                l.Action,
+                l.EntityType,
+                l.EntityId,
+                l.ActorId,
+                l.OldValue,
+                l.NewValue,
+                l.CreatedAt))
+            .ToListAsync(ct);
+
+        return Result<PagedResult<AuditLogDto>>.Success(new PagedResult<AuditLogDto>
+        {
+            Items = items,
+            Total = total,
+            Page = page,
+            Limit = limit,
+        });
     }
 }
