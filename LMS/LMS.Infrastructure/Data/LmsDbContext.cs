@@ -18,6 +18,7 @@ public class LmsDbContext : DbContext
     public DbSet<CompOffRequest> CompOffRequests => Set<CompOffRequest>();
     public DbSet<CompOffCredit> CompOffCredits => Set<CompOffCredit>();
     public DbSet<Notification> Notifications => Set<Notification>();
+    public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
