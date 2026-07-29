@@ -1,137 +1,98 @@
+using System.Text;
+using Hangfire;
+using Hangfire.Dashboard;
+using Hangfire.PostgreSql;
 using LMS.Application.Interfaces;
 using LMS.Application.Settings;
 using LMS.Infrastructure.Data;
 using LMS.Infrastructure.Seeding;
 using LMS.Infrastructure.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Serilog;
-using System.Text;
-using System.Threading.RateLimiting;
-
-Log.Logger = new LoggerConfiguration()
-    .ReadFrom.Configuration(new ConfigurationBuilder()
-        .AddJsonFile("appsettings.json", optional: true)
-        .Build())
-    .WriteTo.Console()
-    .CreateLogger();
 
 var builder = WebApplication.CreateBuilder(args);
+
+// -- Serilog -------------------------------------------------------------------
 builder.Host.UseSerilog((ctx, lc) => lc
     .ReadFrom.Configuration(ctx.Configuration)
     .WriteTo.Console());
 
-// EF Core — PostgreSQL
+// -- EF Core -- PostgreSQL ------------------------------------------------------
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")!;
 builder.Services.AddDbContext<LmsDbContext>(options =>
-    options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseNpgsql(connectionString));
 
-// Settings
+// -- JWT Settings (bound from "JwtSettings" config section) --------------------
 builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("JwtSettings"));
-builder.Services.Configure<AzureAdSettings>(builder.Configuration.GetSection("AzureAd"));
-
 var jwtSettings = builder.Configuration.GetSection("JwtSettings").Get<JwtSettings>() ?? new JwtSettings();
 
-// MSAL config validation — warn on startup if placeholders remain (FR-5)
-var azureTenantId = builder.Configuration["AzureAd:TenantId"] ?? string.Empty;
-var azureClientId = builder.Configuration["AzureAd:ClientId"] ?? string.Empty;
-if (string.IsNullOrWhiteSpace(azureTenantId)
-    || azureTenantId.StartsWith("PLACEHOLDER", StringComparison.OrdinalIgnoreCase)
-    || string.IsNullOrWhiteSpace(azureClientId)
-    || azureClientId.StartsWith("PLACEHOLDER", StringComparison.OrdinalIgnoreCase))
-{
-    Log.Warning(
-        "[AUTH] AzureAd configuration is incomplete or contains placeholder values. "
-        + "Set AzureAd:TenantId and AzureAd:ClientId via environment variables. "
-        + "SSO login (FR-5, FR-6) will not function until these are set.");
-}
-
-// Rate limiting — 10 req/min sliding window per IP on POST /api/v1/auth/login (FR-10)
-builder.Services.AddRateLimiter(options =>
-{
-    options.AddPolicy("login", httpContext =>
-        RateLimitPartition.GetSlidingWindowLimiter(
-            partitionKey: httpContext.Connection.RemoteIpAddress?.ToString() ?? "loopback",
-            factory: _ => new SlidingWindowRateLimiterOptions
-            {
-                PermitLimit = 10,
-                Window = TimeSpan.FromMinutes(1),
-                SegmentsPerWindow = 6,
-                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
-                QueueLimit = 0
-            }
-        )
-    );
-    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-});
-
-// CORS — allow configured frontend origin (default: Vite dev server)
-var frontendOrigin = builder.Configuration["FRONTEND_ORIGIN"] ?? "http://localhost:5173";
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("FrontendPolicy", policy =>
-    {
-        policy.WithOrigins(frontendOrigin)
-              .AllowAnyHeader()
-              .AllowAnyMethod()
-              .AllowCredentials();
-    });
-});
-
-// Authentication — JWT Bearer
-// RoleClaimType = "role" maps to the "role" claim emitted by TokenService
-// so [Authorize(Roles="HrAdmin")] etc. resolves correctly.
+// -- JWT Bearer Authentication --------------------------------------------------
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
         options.TokenValidationParameters = new TokenValidationParameters
         {
-            ValidateIssuer           = true,
-            ValidateAudience         = true,
-            ValidateLifetime         = true,
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-            ValidIssuer              = jwtSettings.Issuer,
-            ValidAudience            = jwtSettings.Audience,
-            IssuerSigningKey         = new SymmetricSecurityKey(
-                Encoding.UTF8.GetBytes(jwtSettings.SecretKey)),
-            RoleClaimType            = "role"  // TokenService emits "role", not ClaimTypes.Role
+            ValidIssuer = jwtSettings.Issuer,
+            ValidAudience = jwtSettings.Audience,
+            IssuerSigningKey = new SymmetricSecurityKey(
+                Encoding.UTF8.GetBytes(jwtSettings.SecretKey))
         };
     });
 
-// In-memory cache — used by DepartmentService (1h TTL on active department list)
-builder.Services.AddMemoryCache();
+builder.Services.AddAuthorization();
 
-// Application services
-builder.Services.AddScoped<IAuthService, AuthService>();
+// -- Application Services ------------------------------------------------------
 builder.Services.AddScoped<ITokenService, TokenService>();
-builder.Services.AddScoped<IMsalAuthProvider, MsalAuthProvider>();
-builder.Services.AddScoped<IAccountService, AccountService>();
-builder.Services.AddScoped<ILeaveTypeService, LeaveTypeService>();
-builder.Services.AddScoped<IHolidayService, HolidayService>();
-builder.Services.AddScoped<IDepartmentService, DepartmentService>();
-builder.Services.AddScoped<IAuditService, AuditService>();
-builder.Services.AddScoped<IEmployeeService, EmployeeService>();
+builder.Services.AddScoped<IAuthService, AuthService>();
 
-// Seeding
+// -- Seed Service (idempotent startup seeder) ----------------------------------
 builder.Services.AddHostedService<SeedService>();
 builder.Services.AddScoped<ISeedService, SeedService>();
 
-builder.Services.AddAuthorization();
+// -- Hangfire (PostgreSQL storage, schema = hangfire) --------------------------
+builder.Services.AddHangfire(config => config
+    .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+    .UseSimpleAssemblyNameTypeSerializer()
+    .UseRecommendedSerializerSettings()
+    .UsePostgreSqlStorage(c => c.UseNpgsqlConnection(connectionString),
+        new PostgreSqlStorageOptions { SchemaName = "hangfire" }));
+builder.Services.AddHangfireServer();
+
+// -- Controllers ---------------------------------------------------------------
 builder.Services.AddControllers();
 
 var app = builder.Build();
 
-// Middleware pipeline order matters:
-// UseRouting → UseCors (before auth) → UseRateLimiter → UseAuthentication → UseAuthorization → endpoints
-app.UseRouting();
-app.UseCors("FrontendPolicy");
-app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
+
+// -- Hangfire Dashboard (restricted to HRAdmin role via JWT claim) -------------
+app.UseHangfireDashboard("/hangfire", new DashboardOptions
+{
+    Authorization = new[] { new HangfireJwtAuthorizationFilter() }
+});
+
 app.MapControllers();
 
 app.Run();
 
-// Expose Program to test assembly via WebApplicationFactory<Program>
-public partial class Program { }
+// ---------------------------------------------------------------------------
+// Hangfire dashboard authorization: requires valid JWT with role=HRAdmin.
+// Placed here (file-scoped) to avoid a separate class file for a small filter.
+// ---------------------------------------------------------------------------
+public class HangfireJwtAuthorizationFilter : IDashboardAuthorizationFilter
+{
+    public bool Authorize(DashboardContext context)
+    {
+        var httpContext = context.GetHttpContext();
+        // User must be authenticated and carry the HRAdmin role claim
+        return httpContext.User.Identity?.IsAuthenticated == true
+            && httpContext.User.IsInRole("HRAdmin");
+    }
+}

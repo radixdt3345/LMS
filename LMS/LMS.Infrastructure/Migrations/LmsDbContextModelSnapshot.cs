@@ -56,9 +56,6 @@ namespace LMS.Infrastructure.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("IsActive")
-                        .HasDatabaseName("ix_departments_is_active");
-
                     b.HasIndex("Name")
                         .IsUnique()
                         .HasDatabaseName("ix_departments_name");
@@ -122,13 +119,17 @@ namespace LMS.Infrastructure.Migrations
                         .HasColumnName("id")
                         .HasDefaultValueSql("gen_random_uuid()");
 
-                    b.Property<decimal>("Allocated")
+                    b.Property<decimal>("AllocatedDays")
+                        .ValueGeneratedOnAdd()
                         .HasColumnType("numeric(5,1)")
-                        .HasColumnName("allocated");
+                        .HasColumnName("allocated_days")
+                        .HasDefaultValue(0m);
 
-                    b.Property<decimal>("Balance")
+                    b.Property<decimal>("CarriedForwardDays")
+                        .ValueGeneratedOnAdd()
                         .HasColumnType("numeric(5,1)")
-                        .HasColumnName("balance");
+                        .HasColumnName("carried_forward_days")
+                        .HasDefaultValue(0m);
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamptz")
@@ -142,21 +143,26 @@ namespace LMS.Infrastructure.Migrations
                         .HasColumnType("timestamptz")
                         .HasColumnName("updated_at");
 
-                    b.Property<decimal>("Used")
+                    b.Property<decimal>("UsedDays")
+                        .ValueGeneratedOnAdd()
                         .HasColumnType("numeric(5,1)")
-                        .HasColumnName("used");
+                        .HasColumnName("used_days")
+                        .HasDefaultValue(0m);
 
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid")
                         .HasColumnName("user_id");
 
-                    b.Property<int>("Year")
-                        .HasColumnType("integer")
+                    b.Property<short>("Year")
+                        .HasColumnType("smallint")
                         .HasColumnName("year");
 
                     b.HasKey("Id");
 
-                    b.HasIndex(new[] { "UserId", "LeaveTypeId", "Year" })
+                    b.HasIndex("LeaveTypeId")
+                        .HasDatabaseName("ix_leave_balances_leave_type_id");
+
+                    b.HasIndex("UserId", "LeaveTypeId", "Year")
                         .IsUnique()
                         .HasDatabaseName("ix_leave_balances_user_leavetype_year");
 
@@ -284,21 +290,11 @@ namespace LMS.Infrastructure.Migrations
                         .HasColumnType("character varying(256)")
                         .HasColumnName("email");
 
-                    b.Property<string>("EmployeeCode")
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasColumnName("employee_code");
-
                     b.Property<short>("FailedLoginCount")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("smallint")
                         .HasColumnName("failed_login_count")
                         .HasDefaultValue((short)0);
-
-                    b.Property<string>("FirstName")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("first_name");
 
                     b.Property<bool>("IsActive")
                         .ValueGeneratedOnAdd()
@@ -306,32 +302,14 @@ namespace LMS.Infrastructure.Migrations
                         .HasColumnName("is_active")
                         .HasDefaultValue(true);
 
-                    b.Property<DateOnly?>("JoinDate")
-                        .HasColumnType("date")
-                        .HasColumnName("join_date");
-
-                    b.Property<string>("LastName")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("last_name");
-
                     b.Property<DateTime?>("LockoutUntil")
                         .HasColumnType("timestamptz")
                         .HasColumnName("lockout_until");
-
-                    b.Property<Guid?>("ManagerId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("manager_id");
 
                     b.Property<string>("PasswordHash")
                         .HasMaxLength(512)
                         .HasColumnType("character varying(512)")
                         .HasColumnName("password_hash");
-
-                    b.Property<string>("Phone")
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasColumnName("phone");
 
                     b.Property<short>("Role")
                         .ValueGeneratedOnAdd()
@@ -356,21 +334,21 @@ namespace LMS.Infrastructure.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_users_email");
 
-                    b.HasIndex("EmployeeCode")
-                        .IsUnique()
-                        .HasDatabaseName("ix_users_employee_code");
-
                     b.HasIndex("IsActive")
                         .HasDatabaseName("ix_users_is_active");
-
-                    b.HasIndex("ManagerId")
-                        .HasDatabaseName("ix_users_manager_id");
 
                     b.ToTable("users");
                 });
 
             modelBuilder.Entity("LMS.Domain.Entities.LeaveBalance", b =>
                 {
+                    b.HasOne("LMS.Domain.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .HasConstraintName("fk_leave_balances_users")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
                     b.HasOne("LMS.Domain.Entities.LeaveType", "LeaveType")
                         .WithMany()
                         .HasForeignKey("LeaveTypeId")
@@ -378,16 +356,8 @@ namespace LMS.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.HasOne("LMS.Domain.Entities.User", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .HasConstraintName("fk_leave_balances_users")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("LeaveType");
-
                     b.Navigation("User");
+                    b.Navigation("LeaveType");
                 });
 
             modelBuilder.Entity("LMS.Domain.Entities.RefreshToken", b =>
@@ -409,14 +379,6 @@ namespace LMS.Infrastructure.Migrations
                         .HasForeignKey("DepartmentId")
                         .HasConstraintName("fk_users_departments_department_id")
                         .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("LMS.Domain.Entities.User", "Manager")
-                        .WithMany("DirectReports")
-                        .HasForeignKey("ManagerId")
-                        .HasConstraintName("fk_users_manager")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.Navigation("Manager");
                 });
 
             modelBuilder.Entity("LMS.Domain.Entities.Department", b =>
@@ -426,7 +388,6 @@ namespace LMS.Infrastructure.Migrations
 
             modelBuilder.Entity("LMS.Domain.Entities.User", b =>
                 {
-                    b.Navigation("DirectReports");
                     b.Navigation("RefreshTokens");
                 });
 #pragma warning restore 612, 618
