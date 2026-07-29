@@ -22,7 +22,7 @@ namespace LMS.Infrastructure.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
-            modelBuilder.Entity("LMS.Domain.Entities.AuditLog", b =>
+            modelBuilder.Entity("LMS.Domain.Entities.ApprovalStep", b =>
                 {
                     b.Property<Guid>("Id")
                         .ValueGeneratedOnAdd()
@@ -30,113 +30,17 @@ namespace LMS.Infrastructure.Migrations
                         .HasColumnName("id")
                         .HasDefaultValueSql("gen_random_uuid()");
 
-                    b.Property<string>("Action")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("action");
-
-                    b.Property<Guid>("ActorId")
+                    b.Property<Guid>("LeaveRequestId")
                         .HasColumnType("uuid")
-                        .HasColumnName("actor_id");
+                        .HasColumnName("leave_request_id");
 
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamptz")
-                        .HasColumnName("created_at");
+                    b.Property<short>("StepNumber")
+                        .HasColumnType("smallint")
+                        .HasColumnName("step_number");
 
-                    b.Property<Guid>("EntityId")
+                    b.Property<Guid>("ApproverId")
                         .HasColumnType("uuid")
-                        .HasColumnName("entity_id");
-
-                    b.Property<string>("EntityType")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)")
-                        .HasColumnName("entity_type");
-
-                    b.Property<string>("NewValue")
-                        .HasColumnType("jsonb")
-                        .HasColumnName("new_value");
-
-                    b.Property<string>("OldValue")
-                        .HasColumnType("jsonb")
-                        .HasColumnName("old_value");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ActorId")
-                        .HasDatabaseName("ix_audit_logs_actor_id");
-
-                    b.HasIndex("CreatedAt")
-                        .HasDatabaseName("ix_audit_logs_created_at")
-                        .IsDescending(true);
-
-                    b.HasIndex("EntityType", "EntityId")
-                        .HasDatabaseName("ix_audit_logs_entity_type_entity_id");
-
-                    b.ToTable("audit_logs");
-                });
-
-            modelBuilder.Entity("LMS.Domain.Entities.CompOffCredit", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id")
-                        .HasDefaultValueSql("gen_random_uuid()");
-
-                    b.Property<Guid>("CompOffRequestId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("comp_off_request_id");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamptz")
-                        .HasColumnName("created_at");
-
-                    b.Property<decimal>("CreditDays")
-                        .HasColumnType("numeric(3,1)")
-                        .HasColumnName("credit_days");
-
-                    b.Property<Guid>("EmployeeId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("employee_id");
-
-                    b.Property<DateOnly>("ExpiresAt")
-                        .HasColumnType("date")
-                        .HasColumnName("expires_at");
-
-                    b.Property<decimal>("UsedDays")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("numeric(3,1)")
-                        .HasColumnName("used_days")
-                        .HasDefaultValue(0m);
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CompOffRequestId")
-                        .HasDatabaseName("ix_comp_off_credits_comp_off_request_id");
-
-                    b.HasIndex("EmployeeId")
-                        .HasDatabaseName("ix_comp_off_credits_employee_id");
-
-                    b.ToTable("comp_off_credits");
-                });
-
-            modelBuilder.Entity("LMS.Domain.Entities.CompOffRequest", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id")
-                        .HasDefaultValueSql("gen_random_uuid()");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamptz")
-                        .HasColumnName("created_at");
-
-                    b.Property<Guid>("EmployeeId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("employee_id");
+                        .HasColumnName("approver_id");
 
                     b.Property<short>("Status")
                         .ValueGeneratedOnAdd()
@@ -144,25 +48,27 @@ namespace LMS.Infrastructure.Migrations
                         .HasColumnName("status")
                         .HasDefaultValue((short)0);
 
-                    b.Property<DateTime>("UpdatedAt")
+                    b.Property<DateTime?>("ActedAt")
                         .HasColumnType("timestamptz")
-                        .HasColumnName("updated_at");
+                        .HasColumnName("acted_at");
 
-                    b.Property<DateOnly>("WorkedDate")
-                        .HasColumnType("date")
-                        .HasColumnName("worked_date");
+                    b.Property<string>("Comment")
+                        .HasColumnType("text")
+                        .HasColumnName("comment");
 
-                    b.Property<decimal>("WorkedHours")
-                        .HasColumnType("numeric(4,1)")
-                        .HasColumnName("worked_hours");
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("EmployeeId", "WorkedDate")
-                        .IsUnique()
-                        .HasDatabaseName("ix_comp_off_requests_employee_id_worked_date");
+                    b.HasIndex("LeaveRequestId")
+                        .HasDatabaseName("ix_approval_steps_leave_request_id");
 
-                    b.ToTable("comp_off_requests");
+                    b.HasIndex("ApproverId", "Status")
+                        .HasDatabaseName("ix_approval_steps_approver_id_status");
+
+                    b.ToTable("approval_steps");
                 });
 
             modelBuilder.Entity("LMS.Domain.Entities.Department", b =>
@@ -254,6 +160,82 @@ namespace LMS.Infrastructure.Migrations
                     b.ToTable("holidays");
                 });
 
+            modelBuilder.Entity("LMS.Domain.Entities.LeaveRequest", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.Property<Guid>("EmployeeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("employee_id");
+
+                    b.Property<Guid>("LeaveTypeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("leave_type_id");
+
+                    b.Property<DateOnly>("StartDate")
+                        .HasColumnType("date")
+                        .HasColumnName("start_date");
+
+                    b.Property<DateOnly>("EndDate")
+                        .HasColumnType("date")
+                        .HasColumnName("end_date");
+
+                    b.Property<decimal>("ComputedDays")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("numeric(5,1)")
+                        .HasColumnName("computed_days")
+                        .HasDefaultValue(0m);
+
+                    b.Property<short>("Status")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("smallint")
+                        .HasColumnName("status")
+                        .HasDefaultValue((short)0);
+
+                    b.Property<bool>("IsRetroactive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_retroactive")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("reason");
+
+                    b.Property<string>("DocumentUrl")
+                        .HasColumnType("text")
+                        .HasColumnName("document_url");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamptz")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EmployeeId")
+                        .HasDatabaseName("ix_leave_requests_employee_id");
+
+                    b.HasIndex("Status")
+                        .HasDatabaseName("ix_leave_requests_status");
+
+                    b.HasIndex("StartDate")
+                        .HasDatabaseName("ix_leave_requests_start_date");
+
+                    b.HasIndex("EmployeeId", "Status")
+                        .HasDatabaseName("ix_leave_requests_employee_id_status");
+
+                    b.ToTable("leave_requests");
+                });
+
             modelBuilder.Entity("LMS.Domain.Entities.LeaveType", b =>
                 {
                     b.Property<Guid>("Id")
@@ -305,65 +287,6 @@ namespace LMS.Infrastructure.Migrations
                         .HasDatabaseName("ix_leave_types_name");
 
                     b.ToTable("leave_types");
-                });
-
-            modelBuilder.Entity("LMS.Domain.Entities.Notification", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id")
-                        .HasDefaultValueSql("gen_random_uuid()");
-
-                    b.Property<string>("Body")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("body");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamptz")
-                        .HasColumnName("created_at");
-
-                    b.Property<bool>("IsRead")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasColumnName("is_read")
-                        .HasDefaultValue(false);
-
-                    b.Property<Guid?>("ResourceId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("resource_id");
-
-                    b.Property<string>("ResourceType")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)")
-                        .HasColumnName("resource_type");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)")
-                        .HasColumnName("title");
-
-                    b.Property<short>("Type")
-                        .HasColumnType("smallint")
-                        .HasColumnName("type");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("user_id");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UserId", "CreatedAt")
-                        .HasDatabaseName("ix_notifications_user_id_created_at")
-                        .IsDescending(false, true);
-
-                    b.HasIndex("UserId", "IsRead", "CreatedAt")
-                        .HasDatabaseName("ix_notifications_user_id_is_read_created_at")
-                        .IsDescending(false, false, true);
-
-                    b.ToTable("notifications");
                 });
 
             modelBuilder.Entity("LMS.Domain.Entities.RefreshToken", b =>
@@ -484,61 +407,44 @@ namespace LMS.Infrastructure.Migrations
                     b.ToTable("users");
                 });
 
-            // ── Relationships ────────────────────────────────────────────────
-
-            modelBuilder.Entity("LMS.Domain.Entities.AuditLog", b =>
+            modelBuilder.Entity("LMS.Domain.Entities.ApprovalStep", b =>
                 {
-                    b.HasOne("LMS.Domain.Entities.User", null)
-                        .WithMany()
-                        .HasForeignKey("ActorId")
-                        .HasConstraintName("fk_audit_logs_users_actor_id")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("LMS.Domain.Entities.CompOffCredit", b =>
-                {
-                    b.HasOne("LMS.Domain.Entities.CompOffRequest", "CompOffRequest")
-                        .WithMany("Credits")
-                        .HasForeignKey("CompOffRequestId")
-                        .HasConstraintName("fk_comp_off_credits_comp_off_requests")
+                    b.HasOne("LMS.Domain.Entities.LeaveRequest", "LeaveRequest")
+                        .WithMany("ApprovalSteps")
+                        .HasForeignKey("LeaveRequestId")
+                        .HasConstraintName("fk_approval_steps_leave_requests_leave_request_id")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("LMS.Domain.Entities.User", "Employee")
+                    b.HasOne("LMS.Domain.Entities.User", "Approver")
                         .WithMany()
-                        .HasForeignKey("EmployeeId")
-                        .HasConstraintName("fk_comp_off_credits_users_employee_id")
+                        .HasForeignKey("ApproverId")
+                        .HasConstraintName("fk_approval_steps_users_approver_id")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.Navigation("CompOffRequest");
-
-                    b.Navigation("Employee");
+                    b.Navigation("LeaveRequest");
+                    b.Navigation("Approver");
                 });
 
-            modelBuilder.Entity("LMS.Domain.Entities.CompOffRequest", b =>
+            modelBuilder.Entity("LMS.Domain.Entities.LeaveRequest", b =>
                 {
                     b.HasOne("LMS.Domain.Entities.User", "Employee")
                         .WithMany()
                         .HasForeignKey("EmployeeId")
-                        .HasConstraintName("fk_comp_off_requests_users_employee_id")
+                        .HasConstraintName("fk_leave_requests_users_employee_id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("LMS.Domain.Entities.LeaveType", "LeaveType")
+                        .WithMany()
+                        .HasForeignKey("LeaveTypeId")
+                        .HasConstraintName("fk_leave_requests_leave_types_leave_type_id")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("Employee");
-                });
-
-            modelBuilder.Entity("LMS.Domain.Entities.Notification", b =>
-                {
-                    b.HasOne("LMS.Domain.Entities.User", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .HasConstraintName("fk_notifications_users_user_id")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("User");
+                    b.Navigation("LeaveType");
                 });
 
             modelBuilder.Entity("LMS.Domain.Entities.RefreshToken", b =>
@@ -562,16 +468,14 @@ namespace LMS.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.SetNull);
                 });
 
-            // ── Collection Navigations ───────────────────────────────────────
-
-            modelBuilder.Entity("LMS.Domain.Entities.CompOffRequest", b =>
-                {
-                    b.Navigation("Credits");
-                });
-
             modelBuilder.Entity("LMS.Domain.Entities.Department", b =>
                 {
                     b.Navigation("Users");
+                });
+
+            modelBuilder.Entity("LMS.Domain.Entities.LeaveRequest", b =>
+                {
+                    b.Navigation("ApprovalSteps");
                 });
 
             modelBuilder.Entity("LMS.Domain.Entities.User", b =>
