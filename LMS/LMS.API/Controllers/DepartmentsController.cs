@@ -6,46 +6,54 @@ using Microsoft.AspNetCore.Mvc;
 namespace LMS.API.Controllers;
 
 /// <summary>
-/// Department management endpoints.
-/// GET: all authenticated users.
-/// POST/PUT/DELETE: HRAdmin and SuperAdmin only.
-/// FR-21 to FR-26.
+/// Department CRUD endpoints.
+/// GET (list + single) — any authenticated user.
+/// POST / PUT / DELETE — HRAdmin or SuperAdmin only.
 /// </summary>
 [ApiController]
 [Route("api/v1/departments")]
 [Authorize]
 public class DepartmentsController : ControllerBase
 {
-    private readonly IDepartmentService _departmentService;
+    private readonly IDepartmentService _departments;
 
-    public DepartmentsController(IDepartmentService departmentService)
+    public DepartmentsController(IDepartmentService departments)
     {
-        _departmentService = departmentService;
+        _departments = departments;
     }
 
-    /// <summary>
-    /// GET /api/v1/departments — returns active departments (1h cached). FR-22.
-    /// Pass ?includeInactive=true to bypass cache and return all.
-    /// </summary>
+    /// <summary>GET /api/v1/departments?page=1&amp;limit=20</summary>
     [HttpGet]
-    public async Task<IActionResult> GetDepartments(
-        [FromQuery] bool includeInactive = false, CancellationToken ct = default)
+    public async Task<IActionResult> GetAll(
+        [FromQuery] int page = 1,
+        [FromQuery] int limit = 20,
+        CancellationToken ct = default)
     {
-        var result = await _departmentService.GetDepartmentsAsync(includeInactive, ct);
+        var result = await _departments.GetAllAsync(page, limit, ct);
         if (!result.IsSuccess)
             return StatusCode(result.StatusCode,
                 new { success = false, error = new { message = result.Error } });
 
-        return Ok(new { success = true, data = result.Value });
+        var r = result.Value!;
+        return Ok(new
+        {
+            success = true,
+            data = new
+            {
+                items = r.Items,
+                total = r.Total,
+                page = r.Page,
+                limit = r.Limit,
+            },
+        });
     }
 
-    /// <summary>
-    /// GET /api/v1/departments/{id} — returns a single department. FR-22.
-    /// </summary>
+    /// <summary>GET /api/v1/departments/{id}</summary>
     [HttpGet("{id:guid}")]
-    public async Task<IActionResult> GetDepartmentById(Guid id, CancellationToken ct)
+    public async Task<IActionResult> GetById(
+        Guid id, CancellationToken ct = default)
     {
-        var result = await _departmentService.GetDepartmentByIdAsync(id, ct);
+        var result = await _departments.GetByIdAsync(id, ct);
         if (!result.IsSuccess)
             return StatusCode(result.StatusCode,
                 new { success = false, error = new { message = result.Error } });
@@ -53,16 +61,14 @@ public class DepartmentsController : ControllerBase
         return Ok(new { success = true, data = result.Value });
     }
 
-    /// <summary>
-    /// POST /api/v1/departments — creates a department. HRAdmin/SuperAdmin only. FR-21.
-    /// Returns 409 if name already exists.
-    /// </summary>
+    /// <summary>POST /api/v1/departments — HRAdmin / SuperAdmin only.</summary>
     [HttpPost]
     [Authorize(Roles = "HRAdmin,SuperAdmin")]
-    public async Task<IActionResult> CreateDepartment(
-        [FromBody] CreateDepartmentRequest request, CancellationToken ct)
+    public async Task<IActionResult> Create(
+        [FromBody] CreateDepartmentDto dto,
+        CancellationToken ct = default)
     {
-        var result = await _departmentService.CreateDepartmentAsync(request, ct);
+        var result = await _departments.CreateAsync(dto, ct);
         if (!result.IsSuccess)
             return StatusCode(result.StatusCode,
                 new { success = false, error = new { message = result.Error } });
@@ -70,16 +76,15 @@ public class DepartmentsController : ControllerBase
         return StatusCode(201, new { success = true, data = result.Value });
     }
 
-    /// <summary>
-    /// PUT /api/v1/departments/{id} — updates a department. HRAdmin/SuperAdmin only. FR-23.
-    /// Returns 409 if new name conflicts with an existing department.
-    /// </summary>
+    /// <summary>PUT /api/v1/departments/{id} — HRAdmin / SuperAdmin only.</summary>
     [HttpPut("{id:guid}")]
     [Authorize(Roles = "HRAdmin,SuperAdmin")]
-    public async Task<IActionResult> UpdateDepartment(
-        Guid id, [FromBody] UpdateDepartmentRequest request, CancellationToken ct)
+    public async Task<IActionResult> Update(
+        Guid id,
+        [FromBody] UpdateDepartmentDto dto,
+        CancellationToken ct = default)
     {
-        var result = await _departmentService.UpdateDepartmentAsync(id, request, ct);
+        var result = await _departments.UpdateAsync(id, dto, ct);
         if (!result.IsSuccess)
             return StatusCode(result.StatusCode,
                 new { success = false, error = new { message = result.Error } });
@@ -87,19 +92,17 @@ public class DepartmentsController : ControllerBase
         return Ok(new { success = true, data = result.Value });
     }
 
-    /// <summary>
-    /// DELETE /api/v1/departments/{id} — soft-deletes. HRAdmin/SuperAdmin only. FR-24, FR-26.
-    /// Returns 409 if department has active employees.
-    /// </summary>
+    /// <summary>DELETE /api/v1/departments/{id} — HRAdmin / SuperAdmin only. Soft-deletes.</summary>
     [HttpDelete("{id:guid}")]
     [Authorize(Roles = "HRAdmin,SuperAdmin")]
-    public async Task<IActionResult> DeleteDepartment(Guid id, CancellationToken ct)
+    public async Task<IActionResult> Delete(
+        Guid id, CancellationToken ct = default)
     {
-        var result = await _departmentService.DeleteDepartmentAsync(id, ct);
+        var result = await _departments.DeleteAsync(id, ct);
         if (!result.IsSuccess)
             return StatusCode(result.StatusCode,
                 new { success = false, error = new { message = result.Error } });
 
-        return Ok(new { success = true });
+        return NoContent();
     }
 }

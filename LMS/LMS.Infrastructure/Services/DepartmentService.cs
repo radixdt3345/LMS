@@ -1,3 +1,4 @@
+using LMS.Application.Common;
 using LMS.Application.DTOs.People;
 using LMS.Application.Interfaces;
 using LMS.Domain.Common;
@@ -9,17 +10,18 @@ using Microsoft.Extensions.Caching.Memory;
 namespace LMS.Infrastructure.Services;
 
 /// <summary>
-/// Department CRUD — FR-21 to FR-26.
-/// The active department list is cached in IMemoryCache with a 1-hour TTL.
-/// Every mutation (create/update/delete) evicts the cache so the next GET re-fetches.
-/// EmployeeCount is the number of active employees currently assigned to a department;
-/// it is computed at query time via a batch GroupBy (no navigation property required).
+/// Department CRUD with IMemoryCache (cache-aside).
+/// CONSTITUTION Rule 1: EF Core only, no raw SQL.
+/// CONSTITUTION Rule 3: all timestamps stored as UTC.
 /// </summary>
 public class DepartmentService : IDepartmentService
 {
     private readonly LmsDbContext _db;
     private readonly IMemoryCache _cache;
-    private const string ActiveCacheKey = "departments_active";
+    private static readonly TimeSpan CacheTtl = TimeSpan.FromMinutes(10);
+
+    // Cache-version token key: removing this invalidates all list caches.
+    private const string ListVersionKey = "departments:list_version";
 
     public DepartmentService(LmsDbContext db, IMemoryCache cache)
     {
@@ -27,175 +29,139 @@ public class DepartmentService : IDepartmentService
         _cache = cache;
     }
 
-    /// <inheritdoc/>
-    public async Task<Result<IEnumerable<DepartmentResponse>>> GetDepartmentsAsync(
-        bool includeInactive = false, CancellationToken ct = default)
+    /// <inheritdoc />
+    public async Task<Result<PaginatedResult<DepartmentDto>>> GetAllAsync(
+        int page, int limit, CancellationToken ct = default)
     {
-        // Only the active-only list is cached
-        if (!includeInactive
-            && _cache.TryGetValue(ActiveCacheKey, out IEnumerable<DepartmentResponse>? cached))
-        {
-            return Result<IEnumerable<DepartmentResponse>>.Success(cached!);
-        }
+        page = Math.Max(page, 1);
+        limit = Math.Clamp(limit, 1, 100);
 
-        var query = _db.Departments.AsNoTracking();
-        if (!includeInactive)
-            query = query.Where(d => d.IsActive);
+        var version = GetOrCreateListVersion();
+        var cacheKey = $"departments:list:{version}:p={page}:l={limit}";
 
-        var departments = await query
-            .OrderBy(d => d.Name)
+        if (_cache.TryGetValue(cacheKey, out PaginatedResult<DepartmentDto>? cached)
+            && cached is not null)
+            return Result<PaginatedResult<DepartmentDto>>.Success(cached);
+
+        var query = _db.Departments
+            .Where(d => d.IsActive)
+            .OrderBy(d => d.Name);
+
+        var total = await query.CountAsync(ct);
+        var items = await query
+            .Skip((page - 1) * limit)
+            .Take(limit)
+            .Select(d => ToDto(d))
             .ToListAsync(ct);
 
-        // Batch-compute active employee counts for all returned departments
-        var deptIds = departments.Select(d => d.Id).ToList();
-        var countMap = deptIds.Count > 0
-            ? await _db.Users.AsNoTracking()
-                .Where(u => u.IsActive && u.DepartmentId.HasValue
-                         && deptIds.Contains(u.DepartmentId!.Value))
-                .GroupBy(u => u.DepartmentId!.Value)
-                .Select(g => new { DeptId = g.Key, Count = g.Count() })
-                .ToDictionaryAsync(x => x.DeptId, x => x.Count, ct)
-            : new Dictionary<Guid, int>();
-
-        var items = departments
-            .Select(d => MapToResponse(d, countMap.GetValueOrDefault(d.Id, 0)))
-            .ToList();
-
-        if (!includeInactive)
-        {
-            _cache.Set(ActiveCacheKey, (IEnumerable<DepartmentResponse>)items,
-                new MemoryCacheEntryOptions
-                {
-                    AbsoluteExpirationRelativeToNow = TimeSpan.FromHours(1)
-                });
-        }
-
-        return Result<IEnumerable<DepartmentResponse>>.Success(items);
+        var result = new PaginatedResult<DepartmentDto>(items, total, page, limit);
+        _cache.Set(cacheKey, result, CacheTtl);
+        return Result<PaginatedResult<DepartmentDto>>.Success(result);
     }
 
-    /// <inheritdoc/>
-    public async Task<Result<DepartmentResponse>> GetDepartmentByIdAsync(
+    /// <inheritdoc />
+    public async Task<Result<DepartmentDto>> GetByIdAsync(
         Guid id, CancellationToken ct = default)
     {
-        var dept = await _db.Departments
-            .AsNoTracking()
-            .FirstOrDefaultAsync(d => d.Id == id, ct);
+        var cacheKey = $"departments:id:{id}";
+        if (_cache.TryGetValue(cacheKey, out DepartmentDto? cached)
+            && cached is not null)
+            return Result<DepartmentDto>.Success(cached);
 
-        if (dept is null)
-            return Result<DepartmentResponse>.Failure("Department not found.", 404);
+        var dept = await _db.Departments.FindAsync([id], ct);
+        if (dept is null || !dept.IsActive)
+            return Result<DepartmentDto>.Failure("Department not found.", 404);
 
-        var count = await _db.Users.AsNoTracking()
-            .CountAsync(u => u.IsActive && u.DepartmentId == id, ct);
-
-        return Result<DepartmentResponse>.Success(MapToResponse(dept, count));
+        var dto = ToDto(dept);
+        _cache.Set(cacheKey, dto, CacheTtl);
+        return Result<DepartmentDto>.Success(dto);
     }
 
-    /// <inheritdoc/>
-    public async Task<Result<DepartmentResponse>> CreateDepartmentAsync(
-        CreateDepartmentRequest request, CancellationToken ct = default)
+    /// <inheritdoc />
+    public async Task<Result<DepartmentDto>> CreateAsync(
+        CreateDepartmentDto dto, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(request.Name))
-            return Result<DepartmentResponse>.Failure("Department name is required.", 400);
+        var nameConflict = await _db.Departments
+            .AnyAsync(d => d.Name == dto.Name, ct);
+        if (nameConflict)
+            return Result<DepartmentDto>.Failure(
+                "A department with this name already exists.", 409);
 
-        var duplicate = await _db.Departments
-            .AnyAsync(d => d.Name == request.Name.Trim() && d.IsActive, ct);
-
-        if (duplicate)
-            return Result<DepartmentResponse>.Failure(
-                $"A department named '{request.Name}' already exists.", 409);
-
-        var now = DateTime.UtcNow;
         var dept = new Department
         {
-            Id          = Guid.NewGuid(),
-            Name        = request.Name.Trim(),
-            Description = request.Description?.Trim(),
-            IsActive    = true,
-            CreatedAt   = now,
-            UpdatedAt   = now,
+            Id = Guid.NewGuid(),
+            Name = dto.Name,
+            Description = dto.Description,
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
         };
 
         _db.Departments.Add(dept);
         await _db.SaveChangesAsync(ct);
-
-        _cache.Remove(ActiveCacheKey);
-
-        // Newly created department always has 0 employees
-        return Result<DepartmentResponse>.Success(MapToResponse(dept, 0));
+        InvalidateListCache();
+        return Result<DepartmentDto>.Success(ToDto(dept));
     }
 
-    /// <inheritdoc/>
-    public async Task<Result<DepartmentResponse>> UpdateDepartmentAsync(
-        Guid id, UpdateDepartmentRequest request, CancellationToken ct = default)
+    /// <inheritdoc />
+    public async Task<Result<DepartmentDto>> UpdateAsync(
+        Guid id, UpdateDepartmentDto dto, CancellationToken ct = default)
     {
-        var dept = await _db.Departments.FindAsync(new object[] { id }, ct);
+        var dept = await _db.Departments.FindAsync([id], ct);
+        if (dept is null || !dept.IsActive)
+            return Result<DepartmentDto>.Failure("Department not found.", 404);
 
-        if (dept is null)
-            return Result<DepartmentResponse>.Failure("Department not found.", 404);
+        var nameConflict = await _db.Departments
+            .AnyAsync(d => d.Name == dto.Name && d.Id != id, ct);
+        if (nameConflict)
+            return Result<DepartmentDto>.Failure(
+                "A department with this name already exists.", 409);
 
-        if (request.Name is not null)
-        {
-            var trimmed = request.Name.Trim();
-            if (trimmed != dept.Name)
-            {
-                var nameConflict = await _db.Departments
-                    .AnyAsync(d => d.Name == trimmed && d.Id != id, ct);
-
-                if (nameConflict)
-                    return Result<DepartmentResponse>.Failure(
-                        $"A department named '{request.Name}' already exists.", 409);
-
-                dept.Name = trimmed;
-            }
-        }
-
-        if (request.Description is not null)
-            dept.Description = request.Description.Trim();
-
-        if (request.IsActive is not null)
-            dept.IsActive = request.IsActive.Value;
-
+        dept.Name = dto.Name;
+        dept.Description = dto.Description;
         dept.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
 
-        _cache.Remove(ActiveCacheKey);
-
-        var count = await _db.Users.AsNoTracking()
-            .CountAsync(u => u.IsActive && u.DepartmentId == id, ct);
-
-        return Result<DepartmentResponse>.Success(MapToResponse(dept, count));
+        _cache.Remove($"departments:id:{id}");
+        InvalidateListCache();
+        return Result<DepartmentDto>.Success(ToDto(dept));
     }
 
-    /// <inheritdoc/>
-    public async Task<Result<bool>> DeleteDepartmentAsync(
+    /// <inheritdoc />
+    public async Task<Result<bool>> DeleteAsync(
         Guid id, CancellationToken ct = default)
     {
-        var dept = await _db.Departments.FindAsync(new object[] { id }, ct);
-
-        if (dept is null)
+        var dept = await _db.Departments.FindAsync([id], ct);
+        if (dept is null || !dept.IsActive)
             return Result<bool>.Failure("Department not found.", 404);
 
-        if (!dept.IsActive)
-            return Result<bool>.Success(true); // idempotent
-
-        // AC: 409 if department has active employees assigned (FR-26)
-        var hasActiveEmployees = await _db.Users
-            .AnyAsync(u => u.DepartmentId == id && u.IsActive, ct);
-
-        if (hasActiveEmployees)
-            return Result<bool>.Failure(
-                "Cannot delete department: it has active employees assigned. " +
-                "Reassign or deactivate employees first.", 409);
-
-        dept.IsActive  = false;
+        dept.IsActive = false;
         dept.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
 
-        _cache.Remove(ActiveCacheKey);
-
+        _cache.Remove($"departments:id:{id}");
+        InvalidateListCache();
         return Result<bool>.Success(true);
     }
 
-    private static DepartmentResponse MapToResponse(Department d, int employeeCount) =>
-        new(d.Id, d.Name, d.Description, d.IsActive, employeeCount, d.CreatedAt, d.UpdatedAt);
+    // ── helpers ──────────────────────────────────────────────────────────────
+
+    private static DepartmentDto ToDto(Department d) =>
+        new(d.Id, d.Name, d.Description, d.IsActive, d.CreatedAt, d.UpdatedAt);
+
+    /// Returns (or creates) the current list-cache version token.
+    private string GetOrCreateListVersion() =>
+        _cache.GetOrCreate(
+            ListVersionKey,
+            e =>
+            {
+                e.Priority = CacheItemPriority.NeverRemove;
+                return Guid.NewGuid().ToString("N");
+            }) ?? Guid.NewGuid().ToString("N");
+
+    /// Bust list caches by replacing the version token.
+    /// Old version-qualified keys will simply never be hit again.
+    private void InvalidateListCache() =>
+        _cache.Set(ListVersionKey, Guid.NewGuid().ToString("N"),
+            new MemoryCacheEntryOptions { Priority = CacheItemPriority.NeverRemove });
 }
