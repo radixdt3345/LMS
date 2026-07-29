@@ -7,6 +7,10 @@ namespace LMS.Application.DTOs.People;
 public record EmployeeDto(
     Guid Id,
     string Email,
+    string? FirstName,
+    string? LastName,
+    string? Phone,
+    string? EmployeeCode,
     string Role,
     Guid? DepartmentId,
     string? DepartmentName,
@@ -24,6 +28,10 @@ public record CreateEmployeeDto(
     string Email,
     string? Password,
     string? AzureAdOid,
+    string? FirstName,
+    string? LastName,
+    string? Phone,
+    string? EmployeeCode,
     Guid? DepartmentId,
     Guid? ManagerId,
     string? Role
@@ -42,4 +50,15 @@ public record UpdateEmployeeDto(
     Guid? ManagerId,
     string? Role,
     bool? IsActive
+);
+
+/// <summary>
+/// Self-service profile update payload. Only firstName, lastName, and phone are mutable
+/// by the employee via the /me endpoint. Role, EmployeeCode, DepartmentId, and ManagerId
+/// cannot be changed via this endpoint (FR-14).
+/// </summary>
+public record UpdateMyProfileDto(
+    string? FirstName,
+    string? LastName,
+    string? Phone
 );

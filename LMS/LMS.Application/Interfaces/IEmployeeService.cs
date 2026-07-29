@@ -5,7 +5,7 @@ namespace LMS.Application.Interfaces;
 
 /// <summary>
 /// Employee management service interface. FR-12 to FR-20.
-/// All methods return Result<T> — never throw for expected failures.
+/// All methods return Result&lt;T&gt; — never throw for expected failures.
 /// </summary>
 public interface IEmployeeService
 {
@@ -29,7 +29,7 @@ public interface IEmployeeService
 
     /// <summary>
     /// Creates a new employee (User record). Returns 409 if email already exists. FR-13.
-    /// Password is BCrypt-hashed when provided; AzureAdOid enables SSO-only accounts.
+    /// Calls DeriveRole on the assigned manager (if any) after creation.
     /// </summary>
     Task<Result<EmployeeDto>> CreateEmployeeAsync(
         CreateEmployeeDto dto,
@@ -37,6 +37,7 @@ public interface IEmployeeService
 
     /// <summary>
     /// Patches employee profile fields (patch semantics — null fields are left unchanged). FR-14.
+    /// When ManagerId changes, calls DeriveRole on both old and new manager.
     /// Calls AuditService.LogAsync on every invocation.
     /// </summary>
     Task<Result<EmployeeDto>> UpdateEmployeeAsync(
@@ -50,5 +51,31 @@ public interface IEmployeeService
     /// </summary>
     Task<Result<bool>> DeactivateEmployeeAsync(
         Guid id,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns the active direct reports of the specified manager. FR-20.
+    /// Caller must be the manager themselves or HRAdmin/SuperAdmin; returns 403 otherwise.
+    /// </summary>
+    Task<Result<IEnumerable<EmployeeDto>>> GetTeamAsync(
+        Guid managerId,
+        Guid callerId,
+        bool callerIsHrAdmin,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Returns the authenticated user's own employee profile. FR-12.
+    /// </summary>
+    Task<Result<EmployeeDto>> GetMyProfileAsync(
+        Guid userId,
+        CancellationToken ct = default);
+
+    /// <summary>
+    /// Updates the authenticated user's own profile (firstName, lastName, phone only). FR-14.
+    /// Role, EmployeeCode, DepartmentId, and ManagerId are silently ignored via this endpoint.
+    /// </summary>
+    Task<Result<EmployeeDto>> UpdateMyProfileAsync(
+        Guid userId,
+        UpdateMyProfileDto dto,
         CancellationToken ct = default);
 }
