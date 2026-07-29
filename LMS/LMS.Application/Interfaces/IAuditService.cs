@@ -1,14 +1,17 @@
+using LMS.Application.DTOs.Reporting;
+using LMS.Domain.Common;
+
 namespace LMS.Application.Interfaces;
 
 /// <summary>
 /// Contract for the domain audit service.
-/// All mutations in domain services must call <see cref="LogAsync"/> on state change.
+/// All mutations in domain services must call <see cref="LogAsync"/> on every state change.
 /// </summary>
 public interface IAuditService
 {
     /// <summary>
     /// Writes an audit record to the database.
-    /// This method must be called by every domain service on every state change.
+    /// Must be called by every domain service on every state-changing operation.
     /// </summary>
     /// <param name="action">Verb describing the operation (e.g. "LeaveRequest.Submit").</param>
     /// <param name="entityType">Domain entity type name (e.g. "LeaveRequest").</param>
@@ -27,7 +30,16 @@ public interface IAuditService
     /// <summary>
     /// This method MUST throw <see cref="InvalidOperationException"/>.
     /// Audit logs are immutable — deletion is never permitted (UT-56, IT-50).
+    /// No database call is made under any circumstances.
     /// </summary>
     /// <exception cref="InvalidOperationException">Always thrown. No DB call is made.</exception>
     void Delete(Guid id);
+
+    /// <summary>
+    /// Returns a paginated, filtered view of the audit log, ordered newest-first.
+    /// All filter parameters are optional. Page is 1-based; Limit is clamped to 1–100.
+    /// Caller is responsible for enforcing role access (HRAdmin / SuperAdmin).
+    /// </summary>
+    Task<Result<PagedResult<AuditLogDto>>> GetAuditLogsAsync(
+        AuditLogQueryDto query, CancellationToken ct = default);
 }
