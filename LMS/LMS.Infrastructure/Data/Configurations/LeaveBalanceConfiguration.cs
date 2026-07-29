@@ -5,9 +5,9 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 namespace LMS.Infrastructure.Data.Configurations;
 
 /// <summary>
-/// EF Core configuration for the leave_balances table.
-/// Unique index on (user_id, leave_type_id, year) enforces one record per user/type/year.
-/// FK to users CASCADE; FK to leave_types RESTRICT.
+/// EF Core configuration for LeaveBalance (LEAVECORE-DB-002).
+/// UNIQUE constraint on (user_id, leave_type_id, year) — one record per
+/// employee per leave type per calendar year.
 /// </summary>
 public class LeaveBalanceConfiguration : IEntityTypeConfiguration<LeaveBalance>
 {
@@ -15,69 +15,68 @@ public class LeaveBalanceConfiguration : IEntityTypeConfiguration<LeaveBalance>
     {
         builder.ToTable("leave_balances");
 
-        builder.HasKey(e => e.Id);
-
-        builder.Property(e => e.Id)
+        builder.HasKey(b => b.Id);
+        builder.Property(b => b.Id)
             .HasColumnName("id")
-            .HasColumnType("uuid")
             .HasDefaultValueSql("gen_random_uuid()");
 
-        builder.Property(e => e.UserId)
+        builder.Property(b => b.UserId)
             .HasColumnName("user_id")
-            .HasColumnType("uuid")
             .IsRequired();
 
-        builder.Property(e => e.LeaveTypeId)
+        builder.Property(b => b.LeaveTypeId)
             .HasColumnName("leave_type_id")
-            .HasColumnType("uuid")
             .IsRequired();
 
-        builder.Property(e => e.Year)
+        builder.Property(b => b.Year)
             .HasColumnName("year")
-            .HasColumnType("integer")
+            .HasColumnType("smallint")
             .IsRequired();
 
-        builder.Property(e => e.Balance)
-            .HasColumnName("balance")
+        builder.Property(b => b.AllocatedDays)
+            .HasColumnName("allocated_days")
             .HasColumnType("numeric(5,1)")
+            .HasDefaultValue(0m)
             .IsRequired();
 
-        builder.Property(e => e.Used)
-            .HasColumnName("used")
+        builder.Property(b => b.UsedDays)
+            .HasColumnName("used_days")
             .HasColumnType("numeric(5,1)")
+            .HasDefaultValue(0m)
             .IsRequired();
 
-        builder.Property(e => e.Allocated)
-            .HasColumnName("allocated")
+        builder.Property(b => b.CarriedForwardDays)
+            .HasColumnName("carried_forward_days")
             .HasColumnType("numeric(5,1)")
+            .HasDefaultValue(0m)
             .IsRequired();
 
-        builder.Property(e => e.CreatedAt)
+        builder.Property(b => b.CreatedAt)
             .HasColumnName("created_at")
             .HasColumnType("timestamptz")
             .IsRequired();
 
-        builder.Property(e => e.UpdatedAt)
+        builder.Property(b => b.UpdatedAt)
             .HasColumnName("updated_at")
             .HasColumnType("timestamptz")
             .IsRequired();
 
-        // One record per user, leave type, and year
-        builder.HasIndex(e => new { e.UserId, e.LeaveTypeId, e.Year })
+        // UNIQUE: one balance record per employee per leave type per year
+        builder.HasIndex(b => new { b.UserId, b.LeaveTypeId, b.Year })
             .IsUnique()
             .HasDatabaseName("ix_leave_balances_user_leavetype_year");
 
-        // FK: user_id → users.id CASCADE
-        builder.HasOne(e => e.User)
+        // FK: user_id → users (Restrict so rows are not silently deleted)
+        builder.HasOne(b => b.User)
             .WithMany()
-            .HasForeignKey(e => e.UserId)
+            .HasForeignKey(b => b.UserId)
             .HasConstraintName("fk_leave_balances_users")
-            .OnDelete(DeleteBehavior.Cascade);
+            .OnDelete(DeleteBehavior.Restrict);
 
-        // FK: leave_type_id → leave_types.id RESTRICT
-        builder.HasOne(e => e.LeaveType)
+        // FK: leave_type_id → leave_types
+        builder.HasOne(b => b.LeaveType)
             .WithMany()
-            .HasForeignKey(e => e.LeaveTypeId)
+            .HasForeignKey(b => b.LeaveTypeId)
             .HasConstraintName("fk_leave_balances_leave_types")
             .OnDelete(DeleteBehavior.Restrict);
     }
