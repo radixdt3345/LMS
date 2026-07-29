@@ -12,7 +12,8 @@ namespace LMS.Infrastructure.Services;
 /// Department CRUD — FR-21 to FR-26.
 /// The active department list is cached in IMemoryCache with a 1-hour TTL.
 /// Every mutation (create/update/delete) evicts the cache so the next GET re-fetches.
-/// AuditService integration is deferred to the REPORTING domain issue.
+/// EmployeeCount is the number of active employees currently assigned to a department;
+/// it is computed at query time via a batch GroupBy (no navigation property required).
 /// </summary>
 public class DepartmentService : IDepartmentService
 {
@@ -30,7 +31,7 @@ public class DepartmentService : IDepartmentService
     public async Task<Result<IEnumerable<DepartmentResponse>>> GetDepartmentsAsync(
         bool includeInactive = false, CancellationToken ct = default)
     {
-        // Only the active list is served from cache
+        // Only the active-only list is cached
         if (!includeInactive
             && _cache.TryGetValue(ActiveCacheKey, out IEnumerable<DepartmentResponse>? cached))
         {
@@ -41,11 +42,24 @@ public class DepartmentService : IDepartmentService
         if (!includeInactive)
             query = query.Where(d => d.IsActive);
 
-        var items = await query
+        var departments = await query
             .OrderBy(d => d.Name)
-            .Select(d => new DepartmentResponse(
-                d.Id, d.Name, d.Description, d.IsActive, d.CreatedAt, d.UpdatedAt))
             .ToListAsync(ct);
+
+        // Batch-compute active employee counts for all returned departments
+        var deptIds = departments.Select(d => d.Id).ToList();
+        var countMap = deptIds.Count > 0
+            ? await _db.Users.AsNoTracking()
+                .Where(u => u.IsActive && u.DepartmentId.HasValue
+                         && deptIds.Contains(u.DepartmentId!.Value))
+                .GroupBy(u => u.DepartmentId!.Value)
+                .Select(g => new { DeptId = g.Key, Count = g.Count() })
+                .ToDictionaryAsync(x => x.DeptId, x => x.Count, ct)
+            : new Dictionary<Guid, int>();
+
+        var items = departments
+            .Select(d => MapToResponse(d, countMap.GetValueOrDefault(d.Id, 0)))
+            .ToList();
 
         if (!includeInactive)
         {
@@ -70,7 +84,10 @@ public class DepartmentService : IDepartmentService
         if (dept is null)
             return Result<DepartmentResponse>.Failure("Department not found.", 404);
 
-        return Result<DepartmentResponse>.Success(MapToResponse(dept));
+        var count = await _db.Users.AsNoTracking()
+            .CountAsync(u => u.IsActive && u.DepartmentId == id, ct);
+
+        return Result<DepartmentResponse>.Success(MapToResponse(dept, count));
     }
 
     /// <inheritdoc/>
@@ -90,12 +107,12 @@ public class DepartmentService : IDepartmentService
         var now = DateTime.UtcNow;
         var dept = new Department
         {
-            Id = Guid.NewGuid(),
-            Name = request.Name.Trim(),
+            Id          = Guid.NewGuid(),
+            Name        = request.Name.Trim(),
             Description = request.Description?.Trim(),
-            IsActive = true,
-            CreatedAt = now,
-            UpdatedAt = now,
+            IsActive    = true,
+            CreatedAt   = now,
+            UpdatedAt   = now,
         };
 
         _db.Departments.Add(dept);
@@ -103,7 +120,8 @@ public class DepartmentService : IDepartmentService
 
         _cache.Remove(ActiveCacheKey);
 
-        return Result<DepartmentResponse>.Success(MapToResponse(dept));
+        // Newly created department always has 0 employees
+        return Result<DepartmentResponse>.Success(MapToResponse(dept, 0));
     }
 
     /// <inheritdoc/>
@@ -142,7 +160,10 @@ public class DepartmentService : IDepartmentService
 
         _cache.Remove(ActiveCacheKey);
 
-        return Result<DepartmentResponse>.Success(MapToResponse(dept));
+        var count = await _db.Users.AsNoTracking()
+            .CountAsync(u => u.IsActive && u.DepartmentId == id, ct);
+
+        return Result<DepartmentResponse>.Success(MapToResponse(dept, count));
     }
 
     /// <inheritdoc/>
@@ -166,7 +187,7 @@ public class DepartmentService : IDepartmentService
                 "Cannot delete department: it has active employees assigned. " +
                 "Reassign or deactivate employees first.", 409);
 
-        dept.IsActive = false;
+        dept.IsActive  = false;
         dept.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
 
@@ -175,6 +196,6 @@ public class DepartmentService : IDepartmentService
         return Result<bool>.Success(true);
     }
 
-    private static DepartmentResponse MapToResponse(Department d) =>
-        new(d.Id, d.Name, d.Description, d.IsActive, d.CreatedAt, d.UpdatedAt);
+    private static DepartmentResponse MapToResponse(Department d, int employeeCount) =>
+        new(d.Id, d.Name, d.Description, d.IsActive, employeeCount, d.CreatedAt, d.UpdatedAt);
 }
