@@ -5,9 +5,11 @@ using Microsoft.EntityFrameworkCore.Metadata.Builders;
 namespace LMS.Infrastructure.Data.Configurations;
 
 /// <summary>
-/// EF Core configuration for LeaveBalance (LEAVECORE-DB-002).
+/// EF Core configuration for LeaveBalance (LEAVECORE-DB-002 / LEAVECORE-API-002).
+/// Maps to the <c>leave_balances</c> table using snake_case column names.
 /// UNIQUE constraint on (user_id, leave_type_id, year) — one record per
 /// employee per leave type per calendar year.
+/// No carry-forward accumulation — POL-06.
 /// </summary>
 public class LeaveBalanceConfiguration : IEntityTypeConfiguration<LeaveBalance>
 {
@@ -65,6 +67,10 @@ public class LeaveBalanceConfiguration : IEntityTypeConfiguration<LeaveBalance>
         builder.HasIndex(b => new { b.UserId, b.LeaveTypeId, b.Year })
             .IsUnique()
             .HasDatabaseName("ix_leave_balances_user_leavetype_year");
+
+        // Fast lookup by user + year
+        builder.HasIndex(b => new { b.UserId, b.Year })
+            .HasDatabaseName("ix_leave_balances_user_year");
 
         // FK: user_id → users (Restrict so rows are not silently deleted)
         builder.HasOne(b => b.User)
