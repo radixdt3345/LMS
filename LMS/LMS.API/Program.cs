@@ -20,19 +20,19 @@ builder.Host.UseSerilog((ctx, lc) => lc
     .ReadFrom.Configuration(ctx.Configuration)
     .WriteTo.Console());
 
-// ── EF Core — PostgreSQL ───────────────────────────────────────────
+// ── EF Core — PostgreSQL ───────────────────────────────────────────────
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")!;
 builder.Services.AddDbContext<LmsDbContext>(options =>
     options.UseNpgsql(connectionString));
 
-// ── In-memory cache ──────────────────────────────────────────────
+// ── In-memory cache ────────────────────────────────────────────────
 builder.Services.AddMemoryCache();
 
-// ── JWT Settings (bound from "JwtSettings" config section) ────────────────
+// ── JWT Settings (bound from "JwtSettings" config section) ──────────────────
 builder.Services.Configure<JwtSettings>(builder.Configuration.GetSection("JwtSettings"));
 var jwtSettings = builder.Configuration.GetSection("JwtSettings").Get<JwtSettings>() ?? new JwtSettings();
 
-// ── JWT Bearer Authentication ───────────────────────────────────────
+// ── JWT Bearer Authentication ───────────────────────────────────────────
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -50,7 +50,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
-// ── Authorization policies ──────────────────────────────────────────
+// ── Authorization policies ──────────────────────────────────────────────
 builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("HRAdminOrAbove", policy =>
@@ -61,24 +61,29 @@ builder.Services.AddAuthorization(options =>
         }));
 });
 
-// ── Application Services ──────────────────────────────────────────
+// ── Application Services ────────────────────────────────────────────────
 builder.Services.AddScoped<ITokenService, TokenService>();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IDepartmentService, DepartmentService>();
 builder.Services.AddScoped<IAuditService, AuditService>();
 builder.Services.AddScoped<ILeaveTypeService, LeaveTypeService>();
 builder.Services.AddScoped<ILeaveBalanceService, LeaveBalanceService>();
+builder.Services.AddScoped<IHolidayService, HolidayService>();
+builder.Services.AddScoped<IEmployeeService, EmployeeService>();
+// LEAVECORE-API-004: leave request CRUD + approval routing
+builder.Services.AddScoped<ILeaveRequestService, LeaveRequestService>();
+builder.Services.AddScoped<IApprovalService, ApprovalService>();
 
 // ── Hangfire job classes (resolved by Hangfire DI activator at job runtime) ──
 builder.Services.AddScoped<NewYearCreditJob>();
 builder.Services.AddScoped<YearEndLapseJob>();
 builder.Services.AddScoped<CompOffExpiryJob>();
 
-// ── Seed Service (idempotent startup seeder) ───────────────────────────
+// ── Seed Service (idempotent startup seeder) ─────────────────────────────────
 builder.Services.AddHostedService<SeedService>();
 builder.Services.AddScoped<ISeedService, SeedService>();
 
-// ── Hangfire (PostgreSQL storage, schema = hangfire) ────────────────────
+// ── Hangfire (PostgreSQL storage, schema = hangfire) ────────────────────────────
 builder.Services.AddHangfire(config => config
     .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
     .UseSimpleAssemblyNameTypeSerializer()
@@ -87,7 +92,7 @@ builder.Services.AddHangfire(config => config
         new PostgreSqlStorageOptions { SchemaName = "hangfire" }));
 builder.Services.AddHangfireServer();
 
-// ── Controllers ──────────────────────────────────────────────────
+// ── Controllers ──────────────────────────────────────────────────────
 builder.Services.AddControllers();
 
 var app = builder.Build();
@@ -95,13 +100,13 @@ var app = builder.Build();
 app.UseAuthentication();
 app.UseAuthorization();
 
-// ── Hangfire Dashboard (HRAdmin role required via JWT claim) ─────────────
+// ── Hangfire Dashboard (HRAdmin role required via JWT claim) ───────────────────
 app.UseHangfireDashboard("/hangfire", new DashboardOptions
 {
     Authorization = new[] { new HangfireJwtAuthorizationFilter() }
 });
 
-// ── Hangfire Recurring Jobs ───────────────────────────────────────────
+// ── Hangfire Recurring Jobs ──────────────────────────────────────────────────
 // YearEndLapseJob  : 31 Dec 18:00 UTC (31 Dec 23:30 IST) — lapse old year first
 // NewYearCreditJob : 31 Dec 18:30 UTC (01 Jan 00:00 IST) — then credit new year
 // CompOffExpiryJob : daily 18:30 UTC (00:00 IST) — expire stale comp-off credits
