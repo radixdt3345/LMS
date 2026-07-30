@@ -1,5 +1,5 @@
 # Task Status — LMS V5
-Updated: 2026-07-29 | Phase: Wave 5
+Updated: 2026-07-30 | Phase: Wave 6C
 
 | Task ID | Issue ID | Type | Status | GitHub Issue | Blocked By |
 |---------|----------|------|--------|-------------|------------|
@@ -26,7 +26,7 @@ Updated: 2026-07-29 | Phase: Wave 5
 | T-021 | PEOPLE-DB-002 | Development | COMPLETE | #15 | T-016 |
 | T-022 | PEOPLE-API-002 | Development | COMPLETE | #16 | T-021 |
 | T-023 | PEOPLE-UI-002 | Development | COMPLETE | #17 | T-022 |
-| T-024 | PEOPLE-INT-002 | Development | PENDING | #68 | T-022,T-023 |
+| T-024 | PEOPLE-INT-002 | Development | COMPLETE | #68 | T-022,T-023 |
 | T-025 | PEOPLE-TEST-002 | Testing | PENDING | #18 | T-024 |
 | T-026 | LEAVECORE-DB-001 | Development | COMPLETE | #19 | T-013 |
 | T-027 | LEAVECORE-API-001 | Development | COMPLETE | #20 | T-026 |
@@ -68,7 +68,7 @@ Updated: 2026-07-29 | Phase: Wave 5
 | T-063 | NOTIFICATIONS-E2E-001 | E2E | PENDING | #50 | T-062 |
 | T-064 | REPORTING-DB-001 | Development | COMPLETE | #51 | T-021 |
 | T-065 | REPORTING-API-002 | Development | COMPLETE | #52 | T-064 |
-| T-066 | REPORTING-UI-005 | Development | PENDING | #53 | T-065 |
+| T-066 | REPORTING-UI-005 | Development | COMPLETE | #53 | T-065 |
 | T-067 | REPORTING-INT-002 | Testing | PENDING | #54 | T-065,T-066 |
 | T-068 | REPORTING-TEST-002 | Testing | PENDING | #55 | T-067 |
 | T-069 | REPORTING-E2E-002 | E2E | PENDING | #56 | T-068 |
