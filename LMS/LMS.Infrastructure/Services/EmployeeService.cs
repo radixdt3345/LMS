@@ -160,8 +160,13 @@ public class EmployeeService : IEmployeeService
         if (dto.ManagerId.HasValue)
             await DeriveRoleAsync(dto.ManagerId.Value, ct);
 
-        await _audit.LogAsync("User", user.Id.ToString(), "Create", null,
-            $"Created employee {user.Email}", ct);
+        await _audit.LogAsync(
+            action: "Create",
+            entityType: "User",
+            entityId: user.Id,
+            actorId: Guid.Empty,
+            oldValue: null,
+            newValue: new { email = user.Email, role = user.Role.ToString() });
 
         return Result<EmployeeDto>.Success(MapToDto(user, null));
     }
@@ -191,8 +196,13 @@ public class EmployeeService : IEmployeeService
         user.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
 
-        await _audit.LogAsync("User", user.Id.ToString(), "Update", null,
-            $"Updated employee {user.Email}", ct);
+        await _audit.LogAsync(
+            action: "Update",
+            entityType: "User",
+            entityId: user.Id,
+            actorId: Guid.Empty,
+            oldValue: null,
+            newValue: new { email = user.Email });
 
         // DeriveRole: on manager_id change, run DeriveRole on both old and new manager
         if (dto.ManagerId is not null && dto.ManagerId.Value != oldManagerId)
@@ -230,8 +240,11 @@ public class EmployeeService : IEmployeeService
         user.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
 
-        await _audit.LogAsync("User", user.Id.ToString(), "Deactivate", null,
-            $"Deactivated employee {user.Email}", ct);
+        await _audit.LogAsync(
+            action: "Deactivate",
+            entityType: "User",
+            entityId: user.Id,
+            actorId: Guid.Empty);
 
         return Result<bool>.Success(true);
     }
@@ -287,8 +300,11 @@ public class EmployeeService : IEmployeeService
         user.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(ct);
 
-        await _audit.LogAsync("User", user.Id.ToString(), "SelfUpdate", user.Id.ToString(),
-            $"Self-updated profile for {user.Email}", ct);
+        await _audit.LogAsync(
+            action: "SelfUpdate",
+            entityType: "User",
+            entityId: user.Id,
+            actorId: user.Id);
 
         string? deptName = null;
         if (user.DepartmentId.HasValue)
