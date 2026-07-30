@@ -11,6 +11,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import RoleProtectedRoute from './components/RoleProtectedRoute';
 import LockedAccountsPage from './pages/admin/LockedAccountsPage';
 import EmployeesPage from './pages/admin/EmployeesPage';
+import AuditTrailPage from './pages/admin/AuditTrailPage';
 import ProfilePage from './pages/profile/ProfilePage';
 import TeamPage from './pages/employees/TeamPage';
 import { useMsal } from '@azure/msal-react';
@@ -94,6 +95,15 @@ function AppRoutes() {
           element={
             <RoleProtectedRoute allowedRoles={['HRAdmin', 'SuperAdmin']}>
               <EmployeesPage />
+            </RoleProtectedRoute>
+          }
+        />
+        {/* REPORTING-UI-005: Audit trail — HR Admin + Super Admin only */}
+        <Route
+          path="/admin/audit"
+          element={
+            <RoleProtectedRoute allowedRoles={['HRAdmin', 'SuperAdmin']}>
+              <AuditTrailPage />
             </RoleProtectedRoute>
           }
         />
