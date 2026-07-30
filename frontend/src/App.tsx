@@ -3,10 +3,11 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Provider } from 'react-redux';
 import { MsalProvider } from '@azure/msal-react';
 import { PublicClientApplication } from '@azure/msal-browser';
-import { ThemeProvider, createTheme, CssBaseline, Box, Typography } from '@mui/material';
+import { ThemeProvider, createTheme, CssBaseline } from '@mui/material';
 import { store } from './store';
 import { msalConfig } from './auth/msalConfig';
 import LoginPage from './pages/LoginPage';
+import DashboardPage from './pages/DashboardPage';
 import ProtectedRoute from './components/ProtectedRoute';
 import RoleProtectedRoute from './components/RoleProtectedRoute';
 import LockedAccountsPage from './pages/admin/LockedAccountsPage';
@@ -28,18 +29,6 @@ const theme = createTheme({
     fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
   },
 });
-
-/** Placeholder dashboard shown after successful login. */
-function DashboardPage() {
-  return (
-    <Box p={4}>
-      <Typography variant="h4">Dashboard</Typography>
-      <Typography color="text.secondary" mt={1}>
-        Welcome to the Leave Management System.
-      </Typography>
-    </Box>
-  );
-}
 
 /**
  * Handles MSAL redirect response (SSO callback).

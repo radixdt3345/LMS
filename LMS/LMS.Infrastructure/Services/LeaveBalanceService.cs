@@ -35,6 +35,7 @@ public class LeaveBalanceService : ILeaveBalanceService
         {
             LeaveTypeId   = b.LeaveTypeId,
             LeaveTypeName = b.LeaveType.Name,
+            AccrualType   = (int)b.LeaveType.AccrualType,
             AllocatedDays = b.AllocatedDays,
             UsedDays      = b.UsedDays,
             AvailableDays = Math.Max(0m, b.AllocatedDays - b.UsedDays),
