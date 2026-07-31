@@ -15,6 +15,8 @@ import EmployeesPage from './pages/admin/EmployeesPage';
 import AuditTrailPage from './pages/admin/AuditTrailPage';
 import ProfilePage from './pages/profile/ProfilePage';
 import TeamPage from './pages/employees/TeamPage';
+import NewCompOffPage from './pages/compoff/NewCompOffPage';
+import CompOffHistoryPage from './pages/compoff/CompOffHistoryPage';
 import { useMsal } from '@azure/msal-react';
 import { useDispatch } from 'react-redux';
 import { ssoCallbackRequest } from './auth/authSlice';
@@ -112,6 +114,24 @@ function AppRoutes() {
             <RoleProtectedRoute allowedRoles={['Manager']}>
               <TeamPage />
             </RoleProtectedRoute>
+          }
+        />
+        {/* COMPOFF-UI-001: Submit a new comp-off request — all authenticated users */}
+        <Route
+          path="/compoff/new"
+          element={
+            <ProtectedRoute>
+              <NewCompOffPage />
+            </ProtectedRoute>
+          }
+        />
+        {/* COMPOFF-UI-001: Comp-off history + manager approvals — all authenticated users */}
+        <Route
+          path="/compoff/history"
+          element={
+            <ProtectedRoute>
+              <CompOffHistoryPage />
+            </ProtectedRoute>
           }
         />
         {/* Default redirect */}
