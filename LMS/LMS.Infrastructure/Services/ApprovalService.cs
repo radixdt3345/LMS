@@ -20,15 +20,21 @@ public class ApprovalService : IApprovalService
     private readonly LmsDbContext _db;
     private readonly IAuditService _audit;
     private readonly ILeaveBalanceService _balance;
+    private readonly IEmailService? _email;
+    private readonly ICalendarService? _calendar;
 
     public ApprovalService(
         LmsDbContext db,
         IAuditService audit,
-        ILeaveBalanceService balance)
+        ILeaveBalanceService balance,
+        IEmailService? email = null,
+        ICalendarService? calendar = null)
     {
-        _db      = db;
-        _audit   = audit;
-        _balance = balance;
+        _db       = db;
+        _audit    = audit;
+        _balance  = balance;
+        _email    = email;
+        _calendar = calendar;
     }
 
     /// <inheritdoc/>
@@ -160,8 +166,31 @@ public class ApprovalService : IApprovalService
                 CreatedAt    = now,
             });
 
-            // TODO: Enqueue approval email via Hangfire once IEmailService is wired (NOTIFICATIONS domain).
-            // TODO: Enqueue Google Calendar event via Hangfire once ICalendarService is wired.
+            // Load employee once for email + calendar (only when the services are wired).
+            User? emp = null;
+            if (_email is not null || _calendar is not null)
+                emp = await _db.Users.FindAsync(request.EmployeeId);
+
+            // Send approval email — plain text + inline HTML, no SendGrid template IDs (UT-54).
+            if (_email is not null && emp is not null)
+            {
+                await _email.SendEmailAsync(
+                    toEmail:  emp.Email,
+                    subject:  "Your leave request has been approved",
+                    textBody: $"Your leave from {request.StartDate:yyyy-MM-dd} to "
+                            + $"{request.EndDate:yyyy-MM-dd} has been approved.",
+                    htmlBody: $"<p>Your leave from <strong>{request.StartDate:yyyy-MM-dd}</strong> to "
+                            + $"<strong>{request.EndDate:yyyy-MM-dd}</strong> has been approved.</p>");
+            }
+
+            // Create company-wide calendar event via service account (no per-user OAuth2).
+            if (_calendar is not null)
+            {
+                await _calendar.CreateLeaveEventAsync(
+                    employeeName: emp?.Email ?? request.EmployeeId.ToString(),
+                    start:        request.StartDate,
+                    end:          request.EndDate);
+            }
         }
 
         await _db.SaveChangesAsync();
@@ -226,7 +255,7 @@ public class ApprovalService : IApprovalService
             CreatedAt    = now,
         });
 
-        // TODO: Enqueue rejection email via Hangfire once IEmailService is wired (NOTIFICATIONS domain).
+        // TODO: Enqueue rejection email via Hangfire once rejection email is confirmed.
 
         await _db.SaveChangesAsync();
 
@@ -270,7 +299,7 @@ public class ApprovalService : IApprovalService
         return Result<IEnumerable<LeaveRequestDto>>.Success(requests.Select(MapToDto));
     }
 
-    // ── helpers ──────────────────────────────────────────────────────────────
+    // ── helpers ──────────────────────────────────────────────────────────────────────────
 
     private static LeaveRequestDto MapToDto(LeaveRequest r) => new()
     {
