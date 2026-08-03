@@ -10,7 +10,7 @@ namespace LMS.Tests.Unit.LeaveCore;
 
 /// <summary>
 /// Unit tests for ApprovalService — approval step routing and action processing.
-/// Covers UT-48 through UT-52.
+/// Covers UT-48 through UT-53.
 /// </summary>
 [Trait("Category", "Unit")]
 public class ApprovalServiceTests : IDisposable
@@ -289,5 +289,58 @@ public class ApprovalServiceTests : IDisposable
             .FirstOrDefaultAsync(n => n.UserId == hrAdmin.Id && n.ResourceId == request.Id);
         Assert.NotNull(notification);
         Assert.Equal(NotificationType.LeaveSubmitted, notification.Type);
+    }
+
+    // ── UT-53 ─────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// UT-53: CRITICAL business rule — no-manager employee with a RETROACTIVE leave request.
+    /// manager_id IS NULL → HR Admin is L1 AND L2 is unconditionally skipped,
+    /// even when the request covers past dates.
+    /// This guarantees the retroactive flag never re-introduces a phantom L2 step
+    /// for employees without a reporting manager.
+    /// </summary>
+    [Fact(DisplayName = "UT-53: No-manager employee + retroactive → exactly 1 step, L2 unconditionally skipped")]
+    public async Task CreateApprovalSteps_NoManagerRetroactive_Creates1StepL2NeverAdded()
+    {
+        // Arrange
+        var hrAdmin  = MakeUser(UserRole.HRAdmin);
+        var employee = MakeUser(UserRole.Employee, managerId: null); // no manager — the critical condition
+        _db.Users.AddRange(hrAdmin, employee);
+        await _db.SaveChangesAsync();
+
+        // Build a retroactive leave request inline (past dates).
+        var requestId = Guid.NewGuid();
+        var retroRequest = new LeaveRequest
+        {
+            Id           = requestId,
+            EmployeeId   = employee.Id,
+            LeaveTypeId  = Guid.NewGuid(),
+            StartDate    = DateOnly.FromDateTime(DateTime.UtcNow.Date.AddDays(-5)), // 5 days ago
+            EndDate      = DateOnly.FromDateTime(DateTime.UtcNow.Date.AddDays(-1)), // yesterday
+            ComputedDays = 5m,
+            Status       = LeaveRequestStatus.Pending,
+            Reason       = "retroactive unit-test",
+            CreatedAt    = DateTime.UtcNow,
+            UpdatedAt    = DateTime.UtcNow,
+        };
+        _db.LeaveRequests.Add(retroRequest);
+        await _db.SaveChangesAsync();
+
+        // Act
+        var result = await _sut.CreateApprovalStepsAsync(requestId, employee);
+
+        // Assert — exactly 1 step, HR Admin is L1, no L2 created despite retroactive dates.
+        Assert.True(result.IsSuccess);
+        var steps = await _db.ApprovalSteps
+            .Where(s => s.LeaveRequestId == requestId)
+            .OrderBy(s => s.StepNumber)
+            .ToListAsync();
+
+        // CRITICAL: must be exactly 1 — L2 is unconditionally skipped when manager_id IS NULL.
+        Assert.Single(steps);
+        Assert.Equal(1,                          steps[0].StepNumber);
+        Assert.Equal(hrAdmin.Id,                 steps[0].ApproverId);
+        Assert.Equal(ApprovalStepStatus.Pending, steps[0].Status);
     }
 }
