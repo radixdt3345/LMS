@@ -78,11 +78,14 @@ builder.Services.AddScoped<IAuditService, AuditService>();
 builder.Services.AddScoped<ILeaveTypeService, LeaveTypeService>();
 builder.Services.AddScoped<ILeaveBalanceService, LeaveBalanceService>();
 builder.Services.AddScoped<IHolidayService, HolidayService>();
-builder.Services.AddScoped<IEmployeeService, EmployeeService>();
 // LEAVECORE-API-004: leave request CRUD + approval routing
 builder.Services.AddScoped<ILeaveRequestService, LeaveRequestService>();
 // LEAVECORE-API-005: approval engine L1/L2
 builder.Services.AddScoped<IApprovalService, ApprovalService>();
+// NOTIFICATIONS-API-001: in-app notifications, email delivery, Google Calendar
+builder.Services.AddScoped<INotificationService, NotificationService>();
+builder.Services.AddScoped<IEmailService, EmailService>();
+builder.Services.AddScoped<ICalendarService, CalendarService>();
 
 // ── Hangfire job classes (resolved by Hangfire DI activator at job runtime) ──
 builder.Services.AddScoped<NewYearCreditJob>();
