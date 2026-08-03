@@ -1,5 +1,5 @@
 # Task Status — LMS V5
-Updated: 2026-08-03 | Phase: Wave 8B
+Updated: 2026-08-03 | Phase: Wave 8A
 
 | Task ID | Issue ID | Type | Status | GitHub Issue | Blocked By |
 |---------|----------|------|--------|-------------|------------|
@@ -56,12 +56,12 @@ Updated: 2026-08-03 | Phase: Wave 8B
 | T-051 | COMPOFF-TEST-001 | Testing | PENDING | #40 | T-050 |
 | T-052 | COMPOFF-E2E-001 | E2E | PENDING | #41 | T-051 |
 | T-053 | LEAVECORE-API-005 | Development | PENDING | #72 | T-042,T-022 |
-| T-054 | LEAVECORE-UI-005 | Development | PENDING | #42 | T-053 |
+| T-054 | LEAVECORE-UI-005 | Development | COMPLETE | #42 | T-053 |
 | T-055 | LEAVECORE-INT-005 | Testing | PENDING | #43 | T-053,T-054 |
 | T-056 | LEAVECORE-TEST-005 | Testing | PENDING | #44 | T-055 |
 | T-057 | LEAVECORE-E2E-002 | E2E | PENDING | #45 | T-056 |
 | T-058 | NOTIFICATIONS-DB-001 | Development | COMPLETE | #46 | T-021 |
-| T-059 | NOTIFICATIONS-API-001 | Development | COMPLETE | #73 | T-058,T-053 |
+| T-059 | NOTIFICATIONS-API-001 | Development | PENDING | #73 | T-058,T-053 |
 | T-060 | NOTIFICATIONS-UI-001 | Development | PENDING | #47 | T-059 |
 | T-061 | NOTIFICATIONS-INT-001 | Testing | PENDING | #48 | T-059,T-060 |
 | T-062 | NOTIFICATIONS-TEST-001 | Testing | PENDING | #49 | T-061 |
