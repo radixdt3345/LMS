@@ -3,8 +3,20 @@ import { BrowserRouter, Routes, Route, Navigate, Link } from 'react-router-dom';
 import { Provider } from 'react-redux';
 import { MsalProvider } from '@azure/msal-react';
 import { PublicClientApplication } from '@azure/msal-browser';
-import { ThemeProvider, createTheme, CssBaseline, Box, Divider, List, ListItem, ListItemButton, ListItemText, Typography } from '@mui/material';
+import {
+  ThemeProvider,
+  createTheme,
+  CssBaseline,
+  Box,
+  Divider,
+  List,
+  ListItem,
+  ListItemButton,
+  ListItemText,
+  Typography,
+} from '@mui/material';
 import { store } from './store';
+import type { RootState } from './store';
 import { msalConfig } from './auth/msalConfig';
 import LoginPage from './pages/LoginPage';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -13,8 +25,9 @@ import LockedAccountsPage from './pages/admin/LockedAccountsPage';
 import NewLeavePage from './pages/leaves/NewLeavePage';
 import LeaveHistoryPage from './pages/leaves/LeaveHistoryPage';
 import AllLeavesPage from './pages/admin/AllLeavesPage';
+import ApprovalsPage from './pages/approvals/ApprovalsPage';
 import { useMsal } from '@azure/msal-react';
-import { useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import { ssoCallbackRequest } from './auth/authSlice';
 
 const msalInstance = new PublicClientApplication(msalConfig);
@@ -29,11 +42,20 @@ const theme = createTheme({
   },
 });
 
+/** Roles that have access to the approval inbox. */
+const APPROVAL_ROLES = ['Manager', 'HRAdmin', 'SuperAdmin'] as const;
+
 /**
  * Sidebar navigation — lightweight list of links for authenticated users.
  * Rendered inside the app shell next to page content.
+ * The "Approvals" link is visible only to Manager, HRAdmin, and SuperAdmin.
  */
 function SidebarNav() {
+  const user = useSelector((state: RootState) => state.auth.user);
+  const canApprove =
+    user !== null &&
+    (APPROVAL_ROLES as readonly string[]).includes(user.role);
+
   return (
     <Box
       component="nav"
@@ -63,6 +85,23 @@ function SidebarNav() {
           </ListItemButton>
         </ListItem>
       </List>
+
+      {canApprove && (
+        <>
+          <Divider sx={{ my: 1 }} />
+          <Typography variant="subtitle2" px={2} py={1} color="text.secondary">
+            Management
+          </Typography>
+          <List dense disablePadding>
+            <ListItem disablePadding>
+              <ListItemButton component={Link} to="/approvals">
+                <ListItemText primary="Approvals" />
+              </ListItemButton>
+            </ListItem>
+          </List>
+        </>
+      )}
+
       <Divider sx={{ my: 1 }} />
       <Typography variant="subtitle2" px={2} py={1} color="text.secondary">
         Admin
@@ -196,6 +235,21 @@ function AppRoutes() {
                 <SidebarNav />
                 <Box flex={1}>
                   <LockedAccountsPage />
+                </Box>
+              </Box>
+            </RoleProtectedRoute>
+          }
+        />
+
+        {/* LEAVECORE-UI-005: Approval inbox — Manager + HR Admin + Super Admin */}
+        <Route
+          path="/approvals"
+          element={
+            <RoleProtectedRoute allowedRoles={['Manager', 'HRAdmin', 'SuperAdmin']}>
+              <Box display="flex">
+                <SidebarNav />
+                <Box flex={1}>
+                  <ApprovalsPage />
                 </Box>
               </Box>
             </RoleProtectedRoute>
