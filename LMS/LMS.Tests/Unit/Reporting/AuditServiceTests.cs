@@ -1,80 +1,72 @@
+using LMS.Domain.Entities;
 using LMS.Infrastructure.Data;
 using LMS.Infrastructure.Services;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
-using Moq;
+using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace LMS.Tests.Unit.Reporting;
 
 /// <summary>
-/// Unit tests for AuditService.
-/// Uses EF Core InMemory provider; no PostgreSQL required.
+/// UT-56: AuditService.Delete must throw InvalidOperationException unconditionally.
+/// The audit log is append-only and immutable — no database call is ever made by Delete.
+///
+/// This is a UNIT test: AuditService is constructed directly with an EF Core InMemory
+/// database so no real PostgreSQL dependency is required. The test verifies both the
+/// thrown exception and the fact that no rows were removed from the AuditLogs table.
+///
+/// Run: dotnet test --filter Category=Unit
 /// </summary>
 [Trait("Category", "Unit")]
 public class AuditServiceTests
 {
-    // ── Helpers ──────────────────────────────────────────────────────────────
+    // ── DB factory ────────────────────────────────────────────────────────────
 
-    private static LmsDbContext CreateInMemoryDb()
+    private static LmsDbContext CreateDb()
     {
-        var options = new DbContextOptionsBuilder<LmsDbContext>()
+        var opts = new DbContextOptionsBuilder<LmsDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
             .Options;
-        return new LmsDbContext(options);
+        return new LmsDbContext(opts);
     }
 
-    private static AuditService BuildService(LmsDbContext db)
-    {
-        var logger = new Mock<ILogger<AuditService>>();
-        return new AuditService(db, logger.Object);
-    }
-
-    // ── UT-56: Delete always throws, no DB call ────────────────────────────────
+    // ── UT-56 ─────────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// UT-56: AuditService.Delete(Guid) MUST throw InvalidOperationException
-    /// and MUST NOT make any database call, regardless of the ID passed.
-    /// Audit logs are append-only and immutable by design.
+    /// UT-56 (CRITICAL): AuditService.Delete throws InvalidOperationException.
+    /// No DB call is permitted — the audit log is immutable.
     /// </summary>
-    [Fact]
-    public void Delete_AlwaysThrowsInvalidOperationException_WithNoDatabaseCall()
+    [Fact(DisplayName = "UT-56 (CRITICAL): AuditService.Delete throws InvalidOperationException — no DB call made")]
+    public async Task Delete_AlwaysThrowsInvalidOperationException_NoDatabaseCallMade()
     {
-        // Arrange — fresh in-memory context (no rows)
-        using var db = CreateInMemoryDb();
-        var svc = BuildService(db);
-        var arbitraryId = Guid.NewGuid();
+        // Arrange: create AuditService with an isolated InMemory DB
+        await using var db = CreateDb();
+        var audit = new AuditService(db, NullLogger<AuditService>.Instance);
 
-        // Act & Assert — exception must be thrown unconditionally
+        // Pre-seed one audit log row so we can confirm no deletion occurs
+        db.AuditLogs.Add(new AuditLog
+        {
+            Id         = Guid.NewGuid(),
+            Action     = "SomeAction",
+            EntityType = "SomeEntity",
+            EntityId   = Guid.NewGuid(),
+            ActorId    = Guid.NewGuid(),
+            CreatedAt  = DateTime.UtcNow,
+        });
+        await db.SaveChangesAsync();
+
+        // Act + Assert: Delete must throw InvalidOperationException unconditionally.
+        // The ID passed is irrelevant — no path through Delete reaches the database.
         var ex = Assert.Throws<InvalidOperationException>(
-            () => svc.Delete(arbitraryId));
+            () => audit.Delete(Guid.NewGuid()));
 
-        // Message must communicate immutability
+        // Assert: the exception message explicitly references immutability
         Assert.Contains("immutable", ex.Message, StringComparison.OrdinalIgnoreCase);
 
-        // No DB call was made: AuditLogs table must still be empty
-        Assert.Empty(db.AuditLogs);
-    }
-
-    /// <summary>
-    /// UT-56 (variant): Delete throws even when rows exist in the table.
-    /// The method must not query or touch the database regardless of state.
-    /// </summary>
-    [Fact]
-    public async Task Delete_ThrowsEvenWhenAuditLogsExist_NoDbCallMade()
-    {
-        // Arrange — pre-populate via LogAsync (which IS allowed to write)
-        using var db = CreateInMemoryDb();
-        var svc = BuildService(db);
-        var actorId = Guid.NewGuid();
-        var entityId = Guid.NewGuid();
-
-        // Seed one audit log via the legitimate write path
-        await svc.LogAsync("Entity.Create", "TestEntity", entityId, actorId);
-        Assert.Single(db.AuditLogs); // confirm the row exists
-
-        // Act & Assert — Delete still throws; the existing row is untouched
-        Assert.Throws<InvalidOperationException>(() => svc.Delete(entityId));
-        Assert.Single(db.AuditLogs); // count unchanged — no delete occurred
+        // Assert: the pre-seeded row is completely untouched — count is still 1.
+        // If Delete had made any DB call, a deletion attempt would have changed this.
+        db.ChangeTracker.Clear();
+        var rowCount = await db.AuditLogs.CountAsync();
+        Assert.Equal(1, rowCount);
     }
 }
