@@ -1,5 +1,5 @@
 # Task Status — LMS V5
-Updated: 2026-07-30 | Phase: Wave 6C
+Updated: 2026-08-03 | Phase: Wave 8B
 
 | Task ID | Issue ID | Type | Status | GitHub Issue | Blocked By |
 |---------|----------|------|--------|-------------|------------|
@@ -61,7 +61,7 @@ Updated: 2026-07-30 | Phase: Wave 6C
 | T-056 | LEAVECORE-TEST-005 | Testing | PENDING | #44 | T-055 |
 | T-057 | LEAVECORE-E2E-002 | E2E | PENDING | #45 | T-056 |
 | T-058 | NOTIFICATIONS-DB-001 | Development | COMPLETE | #46 | T-021 |
-| T-059 | NOTIFICATIONS-API-001 | Development | PENDING | #73 | T-058,T-053 |
+| T-059 | NOTIFICATIONS-API-001 | Development | COMPLETE | #73 | T-058,T-053 |
 | T-060 | NOTIFICATIONS-UI-001 | Development | PENDING | #47 | T-059 |
 | T-061 | NOTIFICATIONS-INT-001 | Testing | PENDING | #48 | T-059,T-060 |
 | T-062 | NOTIFICATIONS-TEST-001 | Testing | PENDING | #49 | T-061 |
