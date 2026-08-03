@@ -1,45 +1,25 @@
-using LMS.Application.DTOs.Reporting;
-using LMS.Domain.Common;
-
 namespace LMS.Application.Interfaces;
 
 /// <summary>
-/// Contract for the domain audit service.
-/// All mutations in domain services must call <see cref="LogAsync"/> on every state change.
+/// Append-only audit log.
+/// Every domain service calls LogAsync on every state-mutating operation.
+/// The audit log must never be deleted (AuditService.Delete throws — UT-56, IT-50).
 /// </summary>
 public interface IAuditService
 {
     /// <summary>
-    /// Writes an audit record to the database.
-    /// Must be called by every domain service on every state-changing operation.
+    /// Records an immutable audit entry.
     /// </summary>
-    /// <param name="action">Verb describing the operation (e.g. "LeaveRequest.Submit").</param>
-    /// <param name="entityType">Domain entity type name (e.g. "LeaveRequest").</param>
-    /// <param name="entityId">UUID of the entity that changed.</param>
-    /// <param name="actorId">UUID of the user who performed the action.</param>
-    /// <param name="oldValue">Entity state before the change; null for creates.</param>
-    /// <param name="newValue">Entity state after the change; null for deletes.</param>
+    /// <param name="actorUserId">User who triggered the action (null for system-initiated events).</param>
+    /// <param name="action">Dot-separated verb, e.g. "notification.created", "leave_request.approved".</param>
+    /// <param name="entityType">Entity name, e.g. "Notification", "LeaveRequest".</param>
+    /// <param name="entityId">PK of the affected entity (null for bulk operations).</param>
+    /// <param name="details">Optional free-text context.</param>
     Task LogAsync(
+        Guid? actorUserId,
         string action,
         string entityType,
-        Guid entityId,
-        Guid actorId,
-        object? oldValue = null,
-        object? newValue = null);
-
-    /// <summary>
-    /// This method MUST throw <see cref="InvalidOperationException"/>.
-    /// Audit logs are immutable — deletion is never permitted (UT-56, IT-50).
-    /// No database call is made under any circumstances.
-    /// </summary>
-    /// <exception cref="InvalidOperationException">Always thrown. No DB call is made.</exception>
-    void Delete(Guid id);
-
-    /// <summary>
-    /// Returns a paginated, filtered view of the audit log, ordered newest-first.
-    /// All filter parameters are optional. Page is 1-based; Limit is clamped to 1–100.
-    /// Caller is responsible for enforcing role access (HRAdmin / SuperAdmin).
-    /// </summary>
-    Task<Result<PagedResult<AuditLogDto>>> GetAuditLogsAsync(
-        AuditLogQueryDto query, CancellationToken ct = default);
+        Guid? entityId,
+        string? details = null,
+        CancellationToken ct = default);
 }
