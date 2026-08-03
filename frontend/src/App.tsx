@@ -14,9 +14,10 @@ import {
   ListItemButton,
   ListItemText,
   Typography,
+  AppBar,
+  Toolbar,
 } from '@mui/material';
 import { store } from './store';
-import type { RootState } from './store';
 import { msalConfig } from './auth/msalConfig';
 import LoginPage from './pages/LoginPage';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -25,9 +26,9 @@ import LockedAccountsPage from './pages/admin/LockedAccountsPage';
 import NewLeavePage from './pages/leaves/NewLeavePage';
 import LeaveHistoryPage from './pages/leaves/LeaveHistoryPage';
 import AllLeavesPage from './pages/admin/AllLeavesPage';
-import ApprovalsPage from './pages/approvals/ApprovalsPage';
+import NotificationBell from './components/NotificationBell';
 import { useMsal } from '@azure/msal-react';
-import { useDispatch, useSelector } from 'react-redux';
+import { useDispatch } from 'react-redux';
 import { ssoCallbackRequest } from './auth/authSlice';
 
 const msalInstance = new PublicClientApplication(msalConfig);
@@ -42,20 +43,10 @@ const theme = createTheme({
   },
 });
 
-/** Roles that have access to the approval inbox. */
-const APPROVAL_ROLES = ['Manager', 'HRAdmin', 'SuperAdmin'] as const;
-
 /**
  * Sidebar navigation — lightweight list of links for authenticated users.
- * Rendered inside the app shell next to page content.
- * The "Approvals" link is visible only to Manager, HRAdmin, and SuperAdmin.
  */
 function SidebarNav() {
-  const user = useSelector((state: RootState) => state.auth.user);
-  const canApprove =
-    user !== null &&
-    (APPROVAL_ROLES as readonly string[]).includes(user.role);
-
   return (
     <Box
       component="nav"
@@ -64,7 +55,7 @@ function SidebarNav() {
         flexShrink: 0,
         borderRight: '1px solid',
         borderColor: 'divider',
-        minHeight: '100vh',
+        minHeight: '100%',
         pt: 2,
         bgcolor: 'background.paper',
       }}
@@ -85,23 +76,6 @@ function SidebarNav() {
           </ListItemButton>
         </ListItem>
       </List>
-
-      {canApprove && (
-        <>
-          <Divider sx={{ my: 1 }} />
-          <Typography variant="subtitle2" px={2} py={1} color="text.secondary">
-            Management
-          </Typography>
-          <List dense disablePadding>
-            <ListItem disablePadding>
-              <ListItemButton component={Link} to="/approvals">
-                <ListItemText primary="Approvals" />
-              </ListItemButton>
-            </ListItem>
-          </List>
-        </>
-      )}
-
       <Divider sx={{ my: 1 }} />
       <Typography variant="subtitle2" px={2} py={1} color="text.secondary">
         Admin
@@ -118,6 +92,29 @@ function SidebarNav() {
           </ListItemButton>
         </ListItem>
       </List>
+    </Box>
+  );
+}
+
+/**
+ * AppShell — wraps all authenticated pages with a top AppBar (containing the
+ * NotificationBell) and the sidebar navigation.
+ */
+function AppShell({ children }: { children: React.ReactNode }) {
+  return (
+    <Box display="flex" flexDirection="column" minHeight="100vh">
+      <AppBar position="static" elevation={1}>
+        <Toolbar>
+          <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
+            Leave Management
+          </Typography>
+          <NotificationBell />
+        </Toolbar>
+      </AppBar>
+      <Box display="flex" flex={1}>
+        <SidebarNav />
+        <Box flex={1}>{children}</Box>
+      </Box>
     </Box>
   );
 }
@@ -166,17 +163,14 @@ function AppRoutes() {
         {/* Public */}
         <Route path="/login" element={<LoginPage />} />
 
-        {/* Authenticated shell — sidebar + page content */}
+        {/* Authenticated shell — AppBar + sidebar + page content */}
         <Route
           path="/dashboard"
           element={
             <ProtectedRoute>
-              <Box display="flex">
-                <SidebarNav />
-                <Box flex={1}>
-                  <DashboardPage />
-                </Box>
-              </Box>
+              <AppShell>
+                <DashboardPage />
+              </AppShell>
             </ProtectedRoute>
           }
         />
@@ -186,12 +180,9 @@ function AppRoutes() {
           path="/leaves/new"
           element={
             <ProtectedRoute>
-              <Box display="flex">
-                <SidebarNav />
-                <Box flex={1}>
-                  <NewLeavePage />
-                </Box>
-              </Box>
+              <AppShell>
+                <NewLeavePage />
+              </AppShell>
             </ProtectedRoute>
           }
         />
@@ -201,12 +192,9 @@ function AppRoutes() {
           path="/leaves/history"
           element={
             <ProtectedRoute>
-              <Box display="flex">
-                <SidebarNav />
-                <Box flex={1}>
-                  <LeaveHistoryPage />
-                </Box>
-              </Box>
+              <AppShell>
+                <LeaveHistoryPage />
+              </AppShell>
             </ProtectedRoute>
           }
         />
@@ -216,12 +204,9 @@ function AppRoutes() {
           path="/admin/leaves"
           element={
             <RoleProtectedRoute allowedRoles={['HRAdmin', 'SuperAdmin']}>
-              <Box display="flex">
-                <SidebarNav />
-                <Box flex={1}>
-                  <AllLeavesPage />
-                </Box>
-              </Box>
+              <AppShell>
+                <AllLeavesPage />
+              </AppShell>
             </RoleProtectedRoute>
           }
         />
@@ -231,27 +216,9 @@ function AppRoutes() {
           path="/admin/users/locked"
           element={
             <RoleProtectedRoute allowedRoles={['HRAdmin', 'SuperAdmin']}>
-              <Box display="flex">
-                <SidebarNav />
-                <Box flex={1}>
-                  <LockedAccountsPage />
-                </Box>
-              </Box>
-            </RoleProtectedRoute>
-          }
-        />
-
-        {/* LEAVECORE-UI-005: Approval inbox — Manager + HR Admin + Super Admin */}
-        <Route
-          path="/approvals"
-          element={
-            <RoleProtectedRoute allowedRoles={['Manager', 'HRAdmin', 'SuperAdmin']}>
-              <Box display="flex">
-                <SidebarNav />
-                <Box flex={1}>
-                  <ApprovalsPage />
-                </Box>
-              </Box>
+              <AppShell>
+                <LockedAccountsPage />
+              </AppShell>
             </RoleProtectedRoute>
           }
         />
