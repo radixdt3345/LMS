@@ -30,6 +30,10 @@ import NotificationBell from './components/NotificationBell';
 import { useMsal } from '@azure/msal-react';
 import { useDispatch } from 'react-redux';
 import { ssoCallbackRequest } from './auth/authSlice';
+import EmployeeDashboardPage from './pages/dashboard/EmployeeDashboardPage';
+import ManagerDashboardPage from './pages/dashboard/ManagerDashboardPage';
+import HrDashboardPage from './pages/dashboard/HrDashboardPage';
+import SuperAdminDashboardPage from './pages/dashboard/SuperAdminDashboardPage';
 
 const msalInstance = new PublicClientApplication(msalConfig);
 
@@ -61,6 +65,32 @@ function SidebarNav() {
       }}
       aria-label="main navigation"
     >
+      <Typography variant="subtitle2" px={2} py={1} color="text.secondary">
+        Dashboard
+      </Typography>
+      <List dense disablePadding>
+        <ListItem disablePadding>
+          <ListItemButton component={Link} to="/dashboard">
+            <ListItemText primary="My Dashboard" />
+          </ListItemButton>
+        </ListItem>
+        <ListItem disablePadding>
+          <ListItemButton component={Link} to="/dashboard/manager">
+            <ListItemText primary="Manager View" />
+          </ListItemButton>
+        </ListItem>
+        <ListItem disablePadding>
+          <ListItemButton component={Link} to="/dashboard/hr">
+            <ListItemText primary="HR View" />
+          </ListItemButton>
+        </ListItem>
+        <ListItem disablePadding>
+          <ListItemButton component={Link} to="/dashboard/super-admin">
+            <ListItemText primary="Admin View" />
+          </ListItemButton>
+        </ListItem>
+      </List>
+      <Divider sx={{ my: 1 }} />
       <Typography variant="subtitle2" px={2} py={1} color="text.secondary">
         Leave
       </Typography>
@@ -119,18 +149,6 @@ function AppShell({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** Placeholder dashboard shown after successful login. */
-function DashboardPage() {
-  return (
-    <Box p={4}>
-      <Typography variant="h4">Dashboard</Typography>
-      <Typography color="text.secondary" mt={1}>
-        Welcome to the Leave Management System.
-      </Typography>
-    </Box>
-  );
-}
-
 /**
  * Handles MSAL redirect response (SSO callback).
  * After MSAL processes the redirect, we exchange the auth code with the backend.
@@ -163,19 +181,71 @@ function AppRoutes() {
         {/* Public */}
         <Route path="/login" element={<LoginPage />} />
 
-        {/* Authenticated shell — AppBar + sidebar + page content */}
+        {/* ------------------------------------------------------------------ */}
+        {/* Dashboard routes — #57 #58 #59 #60                                  */}
+        {/* ------------------------------------------------------------------ */}
+
+        {/* Employee dashboard — all authenticated users */}
         <Route
           path="/dashboard"
           element={
             <ProtectedRoute>
               <AppShell>
-                <DashboardPage />
+                <EmployeeDashboardPage />
+              </AppShell>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/dashboard/employee"
+          element={
+            <ProtectedRoute>
+              <AppShell>
+                <EmployeeDashboardPage />
               </AppShell>
             </ProtectedRoute>
           }
         />
 
-        {/* LEAVECORE-UI-004: Leave request form */}
+        {/* Manager dashboard — Manager, HRAdmin, SuperAdmin */}
+        <Route
+          path="/dashboard/manager"
+          element={
+            <RoleProtectedRoute allowedRoles={['Manager', 'HRAdmin', 'SuperAdmin']}>
+              <AppShell>
+                <ManagerDashboardPage />
+              </AppShell>
+            </RoleProtectedRoute>
+          }
+        />
+
+        {/* HR Admin dashboard — HRAdmin, SuperAdmin */}
+        <Route
+          path="/dashboard/hr"
+          element={
+            <RoleProtectedRoute allowedRoles={['HRAdmin', 'SuperAdmin']}>
+              <AppShell>
+                <HrDashboardPage />
+              </AppShell>
+            </RoleProtectedRoute>
+          }
+        />
+
+        {/* Super Admin dashboard — SuperAdmin only */}
+        <Route
+          path="/dashboard/super-admin"
+          element={
+            <RoleProtectedRoute allowedRoles={['SuperAdmin']}>
+              <AppShell>
+                <SuperAdminDashboardPage />
+              </AppShell>
+            </RoleProtectedRoute>
+          }
+        />
+
+        {/* ------------------------------------------------------------------ */}
+        {/* LEAVECORE-UI-004: Leave request form                                */}
+        {/* ------------------------------------------------------------------ */}
         <Route
           path="/leaves/new"
           element={
