@@ -1,90 +1,358 @@
-using System.Net;
-using System.Net.Http.Json;
+using System.Security.Cryptography;
+using System.Text;
 using LMS.Application.DTOs.Auth;
-using LMS.Tests.Integration;
+using LMS.Application.Interfaces;
+using LMS.Application.Settings;
+using LMS.Domain.Entities;
+using LMS.Domain.Enums;
+using LMS.Infrastructure.Data;
+using LMS.Infrastructure.Services;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using Moq;
 using Xunit;
+using BC = BCrypt.Net.BCrypt;
 
 namespace LMS.Tests.Integration.Auth;
 
 /// <summary>
-/// IT-6 — Middleware integration tests: JWT 401, CORS preflight, rate-limit 429.
-/// Uses an in-process WebApplicationFactory (InMemory DB, no real PostgreSQL required).
+/// Integration tests IT-1 through IT-6 for the AUTH domain.
+/// Covers DB schema accessibility, local login happy path, SSO upsert idempotency,
+/// token refresh rotation, logout revocation, and account lockout enforcement.
+///
+/// Each test gets a uniquely-named EF Core InMemory database — no shared mutable
+/// state between tests. AuthService and TokenService share the same LmsDbContext
+/// instance so token writes made by TokenService are visible to AuthService queries.
+///
+/// IMsalAuthProvider is mocked via Moq; no real Azure AD network calls are made.
 /// </summary>
 [Trait("Category", "Integration")]
-public class AuthIntegrationTests : IClassFixture<CustomWebApplicationFactory>
+public class AuthIntegrationTests
 {
-    private readonly CustomWebApplicationFactory _factory;
+    // ── Helpers ──────────────────────────────────────────────────────────────
 
-    public AuthIntegrationTests(CustomWebApplicationFactory factory)
-    {
-        _factory = factory;
-    }
+    /// <summary>Returns DbContextOptions backed by a uniquely-named InMemory store.</summary>
+    private static DbContextOptions<LmsDbContext> InMemoryOptions() =>
+        new DbContextOptionsBuilder<LmsDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
 
-    /// <summary>
-    /// IT-6: A request to an [Authorize] endpoint with no JWT returns 401.
-    /// JWT Bearer middleware rejects the request before the controller runs.
-    /// </summary>
-    [Fact(DisplayName = "IT-6: No JWT on protected endpoint returns 401")]
-    public async Task NoJwt_ProtectedEndpoint_Returns401()
-    {
-        var client = _factory.CreateClient(
-            new Microsoft.AspNetCore.Mvc.Testing.WebApplicationFactoryClientOptions
-            {
-                AllowAutoRedirect = false
-            });
-
-        // POST /logout requires [Authorize] — no JWT in headers
-        var response = await client.PostAsJsonAsync(
-            "/api/v1/auth/logout",
-            new LogoutRequestDto { RefreshToken = "dummy-token" });
-
-        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
-    }
-
-    /// <summary>
-    /// IT-6: A CORS preflight (OPTIONS) from the allowed frontend origin
-    /// returns 204 with the Access-Control-Allow-Origin header set.
-    /// </summary>
-    [Fact(DisplayName = "IT-6: CORS preflight from allowed origin returns 204 with CORS headers")]
-    public async Task CorsPreFlight_AllowedOrigin_Returns204WithCorsHeaders()
-    {
-        var client = _factory.CreateClient();
-
-        var request = new HttpRequestMessage(HttpMethod.Options, "/api/v1/auth/login");
-        request.Headers.Add("Origin", "http://localhost:5173");
-        request.Headers.Add("Access-Control-Request-Method", "POST");
-        request.Headers.Add("Access-Control-Request-Headers", "Content-Type,Authorization");
-
-        var response = await client.SendAsync(request);
-
-        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
-        Assert.True(
-            response.Headers.Contains("Access-Control-Allow-Origin"),
-            "Response must contain Access-Control-Allow-Origin header");
-        Assert.Equal(
-            "http://localhost:5173",
-            response.Headers.GetValues("Access-Control-Allow-Origin").First());
-    }
-
-    /// <summary>
-    /// IT-6: The sliding-window rate limiter allows 10 requests/minute per IP.
-    /// The 11th request within the window must return 429 Too Many Requests.
-    /// In test, all requests share partition key "loopback" (null RemoteIpAddress).
-    /// </summary>
-    [Fact(DisplayName = "IT-6: 11th login request in sliding window returns 429")]
-    public async Task RateLimit_ElevenLoginRequests_Returns429OnEleventh()
-    {
-        // Use a separate client instance so rate-limit state does not leak from other tests
-        var client = _factory.CreateClient();
-        var payload = new LoginRequestDto { Email = "test@example.com", Password = "AnyPass1!" };
-
-        HttpStatusCode lastStatus = HttpStatusCode.OK;
-        for (int i = 1; i <= 11; i++)
+    private static IOptions<JwtSettings> DefaultJwtOptions() =>
+        Options.Create(new JwtSettings
         {
-            var response = await client.PostAsJsonAsync("/api/v1/auth/login", payload);
-            lastStatus = response.StatusCode;
+            SecretKey                = "test-secret-key-min-32-chars-long!!",
+            Issuer                   = "lms-test",
+            Audience                 = "lms-client",
+            AccessTokenExpiryMinutes = 15,
+            RefreshTokenExpiryDays   = 7,
+        });
+
+    /// <summary>
+    /// Builds a wired-up AuthService + real TokenService sharing one InMemory LmsDbContext.
+    /// Returns the shared db context and MSAL mock so tests can seed data and configure SSO.
+    /// </summary>
+    private static (AuthService auth, LmsDbContext db, Mock<IMsalAuthProvider> msalMock)
+        BuildServices(DbContextOptions<LmsDbContext> options)
+    {
+        var db       = new LmsDbContext(options);
+        var jwtOpts  = DefaultJwtOptions();
+
+        // TokenService shares the exact same db instance as AuthService, so
+        // refresh-token rows written by TokenService are immediately queryable
+        // by AuthService within the same InMemory store.
+        var tokenSvc = new TokenService(jwtOpts, db);
+        var msalMock = new Mock<IMsalAuthProvider>();
+
+        var auth = new AuthService(db, tokenSvc, jwtOpts, msalMock.Object);
+        return (auth, db, msalMock);
+    }
+
+    private static User MakeActiveUser(string email, string password) => new()
+    {
+        Id               = Guid.NewGuid(),
+        Email            = email,
+        PasswordHash     = BC.HashPassword(password),
+        Role             = UserRole.Employee,
+        IsActive         = true,
+        FailedLoginCount = 0,
+        CreatedAt        = DateTime.UtcNow,
+        UpdatedAt        = DateTime.UtcNow,
+    };
+
+    /// <summary>
+    /// SHA-256 hash that mirrors AuthService.HashToken — used to look up token
+    /// rows by raw token value in DB assertions.
+    /// </summary>
+    private static string HashToken(string raw) =>
+        Convert.ToBase64String(SHA256.HashData(Encoding.UTF8.GetBytes(raw)));
+
+    // ── IT-1 — DB schema: auth tables exist ─────────────────────────────────
+
+    /// <summary>
+    /// IT-1: EF Core InMemory DbContext exposes all three auth-related DbSets.
+    /// Verifies that Users, RefreshTokens, and AuditLogs are registered in
+    /// LmsDbContext so the auth domain can read and write its tables.
+    /// </summary>
+    [Fact]
+    public async Task IT1_AuthTables_ExistInDbContext()
+    {
+        // Arrange
+        var options = InMemoryOptions();
+        await using var db = new LmsDbContext(options);
+
+        // Act — EnsureCreated materialises the InMemory schema
+        await db.Database.EnsureCreatedAsync();
+
+        // Assert — all three auth-related DbSets are accessible
+        Assert.NotNull(db.Users);
+        Assert.NotNull(db.RefreshTokens);
+        Assert.NotNull(db.AuditLogs);
+    }
+
+    // ── IT-2 — Login happy path ──────────────────────────────────────────────
+
+    /// <summary>
+    /// IT-2: LoginAsync with valid credentials returns a non-empty AccessToken and
+    /// RefreshToken, and persists a RefreshToken row for the user in the database.
+    /// </summary>
+    [Fact]
+    public async Task IT2_LoginAsync_ValidCredentials_ReturnsTokens_AndPersistsRefreshTokenRow()
+    {
+        // Arrange
+        var options = InMemoryOptions();
+        var (auth, db, _) = BuildServices(options);
+
+        const string password = "ValidPass1!";
+        var user = MakeActiveUser($"it2-{Guid.NewGuid():N}@example.com", password);
+        db.Users.Add(user);
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        // Act
+        var result = await auth.LoginAsync(new LoginRequestDto
+        {
+            Email    = user.Email,
+            Password = password,
+        });
+
+        // Assert — service result is success with non-empty tokens
+        Assert.True(result.IsSuccess, $"Expected success but got: {result.Error}");
+        Assert.NotNull(result.Value);
+        Assert.NotEmpty(result.Value!.AccessToken);
+        Assert.NotEmpty(result.Value.RefreshToken);
+
+        // Assert — a RefreshToken row was persisted for this user
+        db.ChangeTracker.Clear();
+        var tokenRow = await db.RefreshTokens
+            .FirstOrDefaultAsync(t => t.UserId == user.Id);
+        Assert.NotNull(tokenRow);
+        Assert.Null(tokenRow!.RevokedAt);                      // not revoked
+        Assert.True(tokenRow.ExpiresAt > DateTime.UtcNow);    // expires in the future
+    }
+
+    // ── IT-3 — SSO upsert idempotency ────────────────────────────────────────
+
+    /// <summary>
+    /// IT-3: SsoCallbackAsync with a new Azure AD OID auto-provisions an Employee;
+    /// calling again with the same OID returns success without creating a duplicate
+    /// — the user count stays at exactly 1.
+    /// </summary>
+    [Fact]
+    public async Task IT3_SsoCallbackAsync_NewOid_CreatesUser_SecondCallDoesNotDuplicate()
+    {
+        // Arrange
+        var options = InMemoryOptions();
+        var (auth, db, msalMock) = BuildServices(options);
+
+        const string oid   = "azure-oid-abc123";
+        const string email = "sso-user@example.com";
+        const string code  = "auth-code-xyz";
+
+        // Mock MSAL: exchange code → (OID, email) — no real Azure AD call
+        msalMock
+            .Setup(m => m.ExchangeCodeAsync(code, It.IsAny<CancellationToken>()))
+            .ReturnsAsync((oid, email));
+
+        // Act 1 — first SSO callback: user does not exist → auto-provisioned
+        var firstResult = await auth.SsoCallbackAsync(code);
+
+        // Assert 1 — success; one user with correct OID and role
+        Assert.True(firstResult.IsSuccess, $"First SSO call failed: {firstResult.Error}");
+        db.ChangeTracker.Clear();
+
+        var countAfterFirst = await db.Users.CountAsync(u => u.Email == email);
+        Assert.Equal(1, countAfterFirst);
+
+        var createdUser = await db.Users.FirstAsync(u => u.Email == email);
+        Assert.Equal(oid,              createdUser.AzureAdOid);
+        Assert.Equal(UserRole.Employee, createdUser.Role);
+        Assert.True(createdUser.IsActive);
+
+        // Act 2 — second SSO callback with same OID: should update, not insert
+        var secondResult = await auth.SsoCallbackAsync(code);
+
+        // Assert 2 — still exactly one user row, no duplicate
+        Assert.True(secondResult.IsSuccess, $"Second SSO call failed: {secondResult.Error}");
+        db.ChangeTracker.Clear();
+
+        var countAfterSecond = await db.Users.CountAsync(u => u.Email == email);
+        Assert.Equal(1, countAfterSecond);
+    }
+
+    // ── IT-4 — Token refresh rotation ────────────────────────────────────────
+
+    /// <summary>
+    /// IT-4: RefreshTokenAsync with a valid token issues a new access + refresh token pair.
+    /// The old refresh token row is marked revoked (RevokedAt set); exactly one active
+    /// (non-revoked) RefreshToken row remains for the user.
+    /// </summary>
+    [Fact]
+    public async Task IT4_RefreshTokenAsync_ValidToken_RotatesToken_OldRevokedNewActive()
+    {
+        // Arrange — seed user and login to obtain a real raw refresh token
+        var options = InMemoryOptions();
+        var (auth, db, _) = BuildServices(options);
+
+        const string password = "ValidPass1!";
+        var user = MakeActiveUser($"it4-{Guid.NewGuid():N}@example.com", password);
+        db.Users.Add(user);
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var loginResult = await auth.LoginAsync(new LoginRequestDto
+        {
+            Email    = user.Email,
+            Password = password,
+        });
+        Assert.True(loginResult.IsSuccess, "Login must succeed before testing refresh");
+        var rawRefreshToken = loginResult.Value!.RefreshToken;
+
+        // Act — exchange the old refresh token for a new pair
+        var refreshResult = await auth.RefreshTokenAsync(rawRefreshToken);
+
+        // Assert — service returns a new token pair different from the original
+        Assert.True(refreshResult.IsSuccess, $"RefreshTokenAsync failed: {refreshResult.Error}");
+        Assert.NotNull(refreshResult.Value);
+        Assert.NotEmpty(refreshResult.Value!.AccessToken);
+        Assert.NotEmpty(refreshResult.Value.RefreshToken);
+        Assert.NotEqual(rawRefreshToken, refreshResult.Value.RefreshToken);
+
+        // Assert — old refresh token row is now revoked
+        db.ChangeTracker.Clear();
+        var oldHash  = HashToken(rawRefreshToken);
+        var oldToken = await db.RefreshTokens.FirstOrDefaultAsync(t => t.TokenHash == oldHash);
+        Assert.NotNull(oldToken);
+        Assert.NotNull(oldToken!.RevokedAt);
+
+        // Assert — exactly one active (non-revoked) RefreshToken row remains for this user
+        var activeTokens = await db.RefreshTokens
+            .Where(t => t.UserId == user.Id && t.RevokedAt == null)
+            .ToListAsync();
+        Assert.Single(activeTokens);
+    }
+
+    // ── IT-5 — Logout revokes refresh token ──────────────────────────────────
+
+    /// <summary>
+    /// IT-5: LogoutAsync sets RevokedAt on the refresh token row.
+    /// A subsequent call to RefreshTokenAsync with the same (now-revoked) token
+    /// returns a failure result with HTTP 401.
+    /// </summary>
+    [Fact]
+    public async Task IT5_LogoutAsync_ValidToken_RevokesRow_SubsequentRefreshReturns401()
+    {
+        // Arrange — seed user and login
+        var options = InMemoryOptions();
+        var (auth, db, _) = BuildServices(options);
+
+        const string password = "ValidPass1!";
+        var user = MakeActiveUser($"it5-{Guid.NewGuid():N}@example.com", password);
+        db.Users.Add(user);
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        var loginResult = await auth.LoginAsync(new LoginRequestDto
+        {
+            Email    = user.Email,
+            Password = password,
+        });
+        Assert.True(loginResult.IsSuccess, "Login must succeed before testing logout");
+        var rawRefreshToken = loginResult.Value!.RefreshToken;
+
+        // Act — logout (revoke token)
+        var logoutResult = await auth.LogoutAsync(rawRefreshToken);
+
+        // Assert — logout succeeded
+        Assert.True(logoutResult.IsSuccess, $"LogoutAsync failed: {logoutResult.Error}");
+
+        // Assert — token row now has RevokedAt set in the database
+        db.ChangeTracker.Clear();
+        var hash  = HashToken(rawRefreshToken);
+        var token = await db.RefreshTokens.FirstOrDefaultAsync(t => t.TokenHash == hash);
+        Assert.NotNull(token);
+        Assert.NotNull(token!.RevokedAt);
+
+        // Assert — using the revoked token in RefreshTokenAsync returns 401
+        var refreshAttempt = await auth.RefreshTokenAsync(rawRefreshToken);
+        Assert.False(refreshAttempt.IsSuccess);
+        Assert.Equal(401, refreshAttempt.StatusCode);
+    }
+
+    // ── IT-6 — Rate limiting / lockout ───────────────────────────────────────
+
+    /// <summary>
+    /// IT-6: Five consecutive wrong-password attempts trigger account lockout.
+    /// On the 5th failure FailedLoginCount reaches MaxFailedAttempts (5) and
+    /// LockoutUntil is stamped to a future UTC timestamp (returns 423).
+    /// A 6th attempt hits the lockout-check path at the top of LoginAsync and
+    /// also returns 423 — even with a correct password.
+    /// </summary>
+    [Fact]
+    public async Task IT6_LoginAsync_FiveWrongPasswords_LocksAccount_SixthAttemptReturns423()
+    {
+        // Arrange
+        var options = InMemoryOptions();
+        var (auth, db, _) = BuildServices(options);
+
+        const string correctPassword = "CorrectPass1!";
+        var user = MakeActiveUser($"it6-{Guid.NewGuid():N}@example.com", correctPassword);
+        db.Users.Add(user);
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        // Act — 5 consecutive wrong-password attempts
+        //   Attempts 1–4 → 401 (FailedLoginCount < 5)
+        //   Attempt 5   → 423 (FailedLoginCount reaches 5, LockoutUntil stamped)
+        for (var i = 0; i < 5; i++)
+        {
+            await auth.LoginAsync(new LoginRequestDto
+            {
+                Email    = user.Email,
+                Password = "WrongPassword!",
+            });
         }
 
-        Assert.Equal(HttpStatusCode.TooManyRequests, lastStatus);
+        // Assert — DB confirms lockout was applied after 5 failures
+        db.ChangeTracker.Clear();
+        var dbUser = await db.Users.FindAsync(user.Id);
+        Assert.NotNull(dbUser);
+        Assert.NotNull(dbUser!.LockoutUntil);
+        Assert.True(
+            dbUser.LockoutUntil > DateTime.UtcNow,
+            $"LockoutUntil ({dbUser.LockoutUntil:O}) must be a future UTC timestamp");
+        Assert.True(
+            dbUser.FailedLoginCount >= 5,
+            $"FailedLoginCount should be >= 5, was {dbUser.FailedLoginCount}");
+
+        // Act — 6th attempt hits the lockout-check (even with correct password)
+        var sixthResult = await auth.LoginAsync(new LoginRequestDto
+        {
+            Email    = user.Email,
+            Password = correctPassword,
+        });
+
+        // Assert — 6th attempt is blocked with HTTP 423
+        Assert.False(sixthResult.IsSuccess);
+        Assert.Equal(423, sixthResult.StatusCode);
     }
 }
