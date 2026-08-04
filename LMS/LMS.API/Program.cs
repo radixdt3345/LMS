@@ -86,6 +86,8 @@ builder.Services.AddScoped<IApprovalService, ApprovalService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<ICalendarService, CalendarService>();
+// REPORTING-API-001: utilization / trends / compliance reports + role dashboards
+builder.Services.AddScoped<IReportService, ReportService>();
 
 // ── Hangfire job classes (resolved by Hangfire DI activator at job runtime) ──
 builder.Services.AddScoped<NewYearCreditJob>();
