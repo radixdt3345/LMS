@@ -21,6 +21,9 @@ public class LeaveRequestDto
     /// <summary>True when StartDate is earlier than the submission date (UTC).</summary>
     public bool IsRetroactive { get; set; }
 
+    /// <summary>True when the request is a half-day (FR-39). ComputedDays will be 0.5.</summary>
+    public bool IsHalfDay { get; set; }
+
     public string Reason { get; set; } = string.Empty;
     public string? DocumentUrl { get; set; }
     public DateTime CreatedAt { get; set; }

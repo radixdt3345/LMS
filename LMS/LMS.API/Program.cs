@@ -81,6 +81,8 @@ builder.Services.AddScoped<IHolidayService, HolidayService>();
 // LEAVECORE-API-004: leave request CRUD + approval routing
 builder.Services.AddScoped<ILeaveRequestService, LeaveRequestService>();
 // LEAVECORE-API-005: approval engine L1/L2
+builder.Services.AddScoped<ICompOffCreditService, CompOffCreditService>();
+builder.Services.AddScoped<ICompOffRequestService, CompOffRequestService>();
 builder.Services.AddScoped<IApprovalService, ApprovalService>();
 // NOTIFICATIONS-API-001: in-app notifications, email delivery, Google Calendar
 builder.Services.AddScoped<INotificationService, NotificationService>();

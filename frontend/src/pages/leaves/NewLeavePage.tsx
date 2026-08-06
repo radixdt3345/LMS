@@ -7,6 +7,7 @@ import {
   Chip,
   CircularProgress,
   FormControl,
+  FormControlLabel,
   FormHelperText,
   InputLabel,
   MenuItem,
@@ -14,6 +15,7 @@ import {
   Select,
   type SelectChangeEvent,
   Snackbar,
+  Switch,
   TextField,
   Typography,
 } from '@mui/material';
@@ -26,12 +28,13 @@ import {
 } from '../../api/leaveRequestsApi';
 
 /**
- * NewLeavePage — FR-18, FR-19.
+ * NewLeavePage — FR-18, FR-19, FR-39.
  *
  * Allows an authenticated employee to submit a new leave request.
  *   1. Fill in dates, leave type, reason, optional document URL.
  *   2. Live preview of computed working days (debounced 500 ms).
- *   3. Submit: POST /create → POST /submit → navigate to /leaves/history.
+ *   3. Half-day toggle — visible only when start == end (single day).
+ *   4. Submit: POST /create → POST /submit → navigate to /leaves/history.
  *
  * Route: /leaves/new
  * Guard: ProtectedRoute (any authenticated user)
@@ -47,6 +50,7 @@ export default function NewLeavePage() {
   const [leaveTypeId, setLeaveTypeId] = useState('');
   const [reason, setReason] = useState('');
   const [documentUrl, setDocumentUrl] = useState('');
+  const [isHalfDay, setIsHalfDay] = useState(false);
 
   // -------------------------------------------------------------------------
   // Derived / remote state
@@ -72,6 +76,8 @@ export default function NewLeavePage() {
   // -------------------------------------------------------------------------
   const selectedLeaveType = leaveTypes.find((lt) => lt.id === leaveTypeId);
   const requiresDocument = selectedLeaveType?.requiresDocument ?? false;
+  // Half-day is only available when start == end (single day selected)
+  const isSingleDay = !!startDate && startDate === endDate;
 
   // -------------------------------------------------------------------------
   // Load leave types on mount
@@ -180,6 +186,7 @@ export default function NewLeavePage() {
         endDate,
         reason: reason.trim(),
         documentUrl: requiresDocument && documentUrl.trim() ? documentUrl.trim() : null,
+        isHalfDay: isSingleDay && isHalfDay,
       });
 
       // Step 2: submit (Draft → Pending)
@@ -240,6 +247,8 @@ export default function NewLeavePage() {
             onChange={(e) => {
               setEndDate(e.target.value);
               setErrors((prev) => ({ ...prev, endDate: '' }));
+              // Reset half-day when date range becomes multi-day
+              if (e.target.value !== startDate) setIsHalfDay(false);
             }}
             error={!!errors.endDate}
             helperText={errors.endDate}
@@ -247,18 +256,33 @@ export default function NewLeavePage() {
           />
         </Box>
 
-        {/* Computed days chip */}
-        <Box mb={2} minHeight={32} display="flex" alignItems="center">
-          {previewLoading && (
-            <CircularProgress size={16} sx={{ mr: 1 }} />
-          )}
-          {!previewLoading && computedDays !== null && (
-            <Chip
-              label={`${computedDays} working day${computedDays !== 1 ? 's' : ''}`}
-              color="primary"
-              variant="outlined"
-              size="small"
-              data-testid="computed-days-chip"
+        {/* Computed days chip + half-day toggle */}
+        <Box mb={2} display="flex" alignItems="center" gap={2} flexWrap="wrap">
+          <Box minHeight={32} display="flex" alignItems="center">
+            {previewLoading && (
+              <CircularProgress size={16} sx={{ mr: 1 }} />
+            )}
+            {!previewLoading && computedDays !== null && (
+              <Chip
+                label={`${isHalfDay && isSingleDay ? 0.5 : computedDays} working day${(!isHalfDay || !isSingleDay) && computedDays !== 1 ? 's' : ''}`}
+                color="primary"
+                variant="outlined"
+                size="small"
+                data-testid="computed-days-chip"
+              />
+            )}
+          </Box>
+          {isSingleDay && (
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={isHalfDay}
+                  onChange={(e) => setIsHalfDay(e.target.checked)}
+                  inputProps={{ 'aria-label': 'half-day toggle', 'data-testid': 'half-day-switch' } as React.InputHTMLAttributes<HTMLInputElement>}
+                  size="small"
+                />
+              }
+              label="Half day (0.5)"
             />
           )}
         </Box>

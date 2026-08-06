@@ -39,6 +39,12 @@ public class LeaveRequest
     /// </summary>
     public bool IsRetroactive { get; set; } = false;
 
+    /// <summary>
+    /// True when the employee requests only half a day (StartDate == EndDate).
+    /// When true, ComputedDays is forced to 0.5 by the service layer (FR-39).
+    /// </summary>
+    public bool IsHalfDay { get; set; } = false;
+
     /// <summary>Employee-provided reason for the leave.</summary>
     public string Reason { get; set; } = string.Empty;
 

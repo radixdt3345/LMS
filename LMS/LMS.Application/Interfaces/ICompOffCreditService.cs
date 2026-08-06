@@ -23,4 +23,11 @@ public interface ICompOffCreditService
     /// Returns all comp-off credits for the given employee, ordered by expiry descending.
     /// </summary>
     Task<Result<List<CompOffCreditDto>>> GetMyCreditsAsync(Guid employeeId);
+
+    /// <summary>
+    /// Deducts <paramref name="days"/> from the employee's non-expired comp-off credits,
+    /// consuming them FIFO by expiry date (earliest-expiring first).
+    /// Called when a comp-off leave request reaches final approval.
+    /// </summary>
+    Task DeductCreditsAsync(Guid employeeId, decimal days);
 }

@@ -19,4 +19,10 @@ public class CreateLeaveRequestDto
 
     /// <summary>Optional URL to a supporting document (required for certain leave types).</summary>
     public string? DocumentUrl { get; set; }
+
+    /// <summary>
+    /// True when the employee requests only half a day (FR-39).
+    /// Only valid when StartDate == EndDate. Forces ComputedDays = 0.5.
+    /// </summary>
+    public bool IsHalfDay { get; set; } = false;
 }

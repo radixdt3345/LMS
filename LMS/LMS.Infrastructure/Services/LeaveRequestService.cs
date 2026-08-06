@@ -52,6 +52,11 @@ public class LeaveRequestService : ILeaveRequestService
             return Result<LeaveRequestDto>.Failure(
                 "Leave type not found or is inactive.", 404);
 
+        // FR-39 validation: IsHalfDay is only valid for single-day requests.
+        if (dto.IsHalfDay && dto.StartDate != dto.EndDate)
+            return Result<LeaveRequestDto>.Failure(
+                "Half-day leave is only valid when start date equals end date.");
+
         var now = DateTime.UtcNow;
         var request = new LeaveRequest
         {
@@ -62,6 +67,7 @@ public class LeaveRequestService : ILeaveRequestService
             EndDate     = dto.EndDate,
             Reason      = dto.Reason,
             DocumentUrl = dto.DocumentUrl,
+            IsHalfDay   = dto.IsHalfDay,
             Status      = LeaveRequestStatus.Draft,
             CreatedAt   = now,
             UpdatedAt   = now,
@@ -108,6 +114,11 @@ public class LeaveRequestService : ILeaveRequestService
         var holidays = await GetHolidaySetAsync(request.StartDate, request.EndDate, ct);
         request.ComputedDays = SandwichRuleEngine.ComputeLeaveDays(
             request.StartDate, request.EndDate, holidays);
+
+        // FR-39: Half-day override — when IsHalfDay is true and it is a single-day request,
+        // force ComputedDays to 0.5 regardless of what the SandwichRuleEngine returned.
+        if (request.IsHalfDay && request.StartDate == request.EndDate)
+            request.ComputedDays = 0.5m;
 
         // 2. Retroactive flag — start date is in the past (UTC).
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
@@ -332,6 +343,7 @@ public class LeaveRequestService : ILeaveRequestService
         ComputedDays  = r.ComputedDays,
         Status        = r.Status.ToString(),
         IsRetroactive = r.IsRetroactive,
+        IsHalfDay     = r.IsHalfDay,
         Reason        = r.Reason,
         DocumentUrl   = r.DocumentUrl,
         CreatedAt     = r.CreatedAt,

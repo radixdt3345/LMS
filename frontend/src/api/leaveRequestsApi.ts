@@ -41,6 +41,7 @@ export interface LeaveRequestDto {
   reason: string;
   documentUrl: string | null;
   isRetroactive: boolean;
+  isHalfDay: boolean;
   /** ISO-8601 UTC timestamp */
   createdAt: string;
 }
@@ -51,6 +52,8 @@ export interface CreateLeaveRequestDto {
   endDate: string;
   reason: string;
   documentUrl?: string | null;
+  /** FR-39: half-day request — only valid when startDate === endDate */
+  isHalfDay?: boolean;
 }
 
 export interface PreviewLeaveResponse {

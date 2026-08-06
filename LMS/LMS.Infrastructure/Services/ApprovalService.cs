@@ -20,6 +20,7 @@ public class ApprovalService : IApprovalService
     private readonly LmsDbContext _db;
     private readonly IAuditService _audit;
     private readonly ILeaveBalanceService _balance;
+    private readonly ICompOffCreditService? _compOffCredit;
     private readonly IEmailService? _email;
     private readonly ICalendarService? _calendar;
 
@@ -27,14 +28,16 @@ public class ApprovalService : IApprovalService
         LmsDbContext db,
         IAuditService audit,
         ILeaveBalanceService balance,
+        ICompOffCreditService? compOffCredit = null,
         IEmailService? email = null,
         ICalendarService? calendar = null)
     {
-        _db       = db;
-        _audit    = audit;
-        _balance  = balance;
-        _email    = email;
-        _calendar = calendar;
+        _db            = db;
+        _audit         = audit;
+        _balance       = balance;
+        _compOffCredit = compOffCredit;
+        _email         = email;
+        _calendar      = calendar;
     }
 
     /// <inheritdoc/>
@@ -101,6 +104,7 @@ public class ApprovalService : IApprovalService
     {
         var request = await _db.LeaveRequests
             .Include(r => r.ApprovalSteps)
+            .Include(r => r.LeaveType)
             .FirstOrDefaultAsync(r => r.Id == requestId);
 
         if (request is null)
@@ -152,6 +156,17 @@ public class ApprovalService : IApprovalService
             // All steps approved — finalise the request.
             request.Status    = LeaveRequestStatus.Approved;
             request.UpdatedAt = now;
+
+            // Deduct comp-off credits when the approved leave is a Comp Off type.
+            // Credits are consumed FIFO by expiry date (earliest-expiring first).
+            if (_compOffCredit is not null
+                && request.LeaveType is not null
+                && request.LeaveType.AccrualType == AccrualType.OneTime
+                && request.LeaveType.Name.Contains("Comp", StringComparison.OrdinalIgnoreCase)
+                && request.ComputedDays > 0m)
+            {
+                await _compOffCredit.DeductCreditsAsync(request.EmployeeId, request.ComputedDays);
+            }
 
             // Notify the employee in-app.
             _db.Notifications.Add(new Notification
@@ -312,6 +327,7 @@ public class ApprovalService : IApprovalService
         ComputedDays  = r.ComputedDays,
         Status        = r.Status.ToString(),
         IsRetroactive = r.IsRetroactive,
+        IsHalfDay     = r.IsHalfDay,
         Reason        = r.Reason,
         DocumentUrl   = r.DocumentUrl,
         CreatedAt     = r.CreatedAt,

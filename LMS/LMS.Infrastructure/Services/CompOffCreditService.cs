@@ -125,4 +125,36 @@ public class CompOffCreditService : ICompOffCreditService
                 CreatedAt        = c.CreatedAt,
             }).ToList());
     }
+
+    /// <inheritdoc/>
+    public async Task DeductCreditsAsync(Guid employeeId, decimal days)
+    {
+        if (days <= 0m) return;
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+
+        // Load non-expired credits with remaining balance, FIFO by expiry (earliest first).
+        var credits = await _db.CompOffCredits
+            .Where(c => c.EmployeeId == employeeId
+                     && c.ExpiresAt >= today
+                     && c.UsedDays < c.CreditDays)
+            .OrderBy(c => c.ExpiresAt)
+            .ToListAsync();
+
+        var remaining = days;
+        foreach (var credit in credits)
+        {
+            if (remaining <= 0m) break;
+
+            var available = credit.CreditDays - credit.UsedDays;
+            var consume   = Math.Min(available, remaining);
+
+            credit.UsedDays += consume;
+            remaining        -= consume;
+        }
+
+        // Remaining > 0 means credits are exhausted (shouldn't happen if balance was checked
+        // on submit, but we deduct as much as possible and do not throw).
+        await _db.SaveChangesAsync();
+    }
 }
