@@ -1,13 +1,14 @@
 /**
  * REPORTING-UI-004 / Issue #60 — Super Admin Dashboard
  *
- * Shows four stat cards:
+ * Shows five stat cards:
  *   - Total Employees
  *   - Total Departments
- *   - Locked Accounts (orange/red when > 0, with link to /admin/users/locked)
- *   - Recent Audit Events (with link to /admin/audit)
+ *   - Active Leave Today
+ *   - Pending Approvals (orange when > 0)
+ *   - System Leave Utilization %
  *
- * A note about Hangfire is shown at the bottom.
+ * Plus a note about Hangfire.
  */
 import { useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
@@ -22,10 +23,11 @@ import {
   Grid,
   Typography,
 } from '@mui/material';
-import LockIcon from '@mui/icons-material/Lock';
 import PeopleIcon from '@mui/icons-material/People';
 import BusinessIcon from '@mui/icons-material/Business';
-import HistoryIcon from '@mui/icons-material/History';
+import EventBusyIcon from '@mui/icons-material/EventBusy';
+import PendingActionsIcon from '@mui/icons-material/PendingActions';
+import BarChartIcon from '@mui/icons-material/BarChart';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 import { fetchSuperAdminDashboard } from '../../store/slices/dashboardSlice';
 import type { RootState, AppDispatch } from '../../store';
@@ -75,15 +77,10 @@ function StatCard({ label, value, icon, colour, onClick, warning }: StatCardProp
   return (
     <Card
       variant="outlined"
-      sx={{
-        borderColor: warning ? 'warning.main' : undefined,
-        height: '100%',
-      }}
+      sx={{ borderColor: warning ? 'warning.main' : undefined, height: '100%' }}
     >
       {onClick ? (
-        <CardActionArea onClick={onClick} sx={{ height: '100%' }}>
-          {content}
-        </CardActionArea>
+        <CardActionArea onClick={onClick} sx={{ height: '100%' }}>{content}</CardActionArea>
       ) : (
         content
       )}
@@ -110,7 +107,8 @@ export default function SuperAdminDashboardPage() {
     );
   }
 
-  const lockedCount = data?.lockedAccountCount ?? 0;
+  const pendingApprovals = data?.pendingApprovals ?? 0;
+  const utilPct = data?.systemLeaveUtilizationPercent ?? 0;
 
   return (
     <Box p={4}>
@@ -126,7 +124,7 @@ export default function SuperAdminDashboardPage() {
 
       <Grid container spacing={3} mb={4}>
         {/* Total Employees */}
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid item xs={12} sm={6} md={4} lg={2}>
           <StatCard
             label="Total Employees"
             value={data?.totalEmployees ?? '—'}
@@ -135,7 +133,7 @@ export default function SuperAdminDashboardPage() {
         </Grid>
 
         {/* Total Departments */}
-        <Grid item xs={12} sm={6} md={3}>
+        <Grid item xs={12} sm={6} md={4} lg={2}>
           <StatCard
             label="Total Departments"
             value={data?.totalDepartments ?? '—'}
@@ -144,25 +142,34 @@ export default function SuperAdminDashboardPage() {
           />
         </Grid>
 
-        {/* Locked Accounts — warning when count > 0 */}
-        <Grid item xs={12} sm={6} md={3}>
+        {/* Active Leave Today */}
+        <Grid item xs={12} sm={6} md={4} lg={2}>
           <StatCard
-            label="Locked Accounts"
-            value={lockedCount}
-            icon={<LockIcon fontSize="large" />}
-            warning={lockedCount > 0}
-            onClick={() => navigate('/admin/users/locked')}
+            label="On Leave Today"
+            value={data?.activeLeaveToday ?? '—'}
+            icon={<EventBusyIcon fontSize="large" />}
+            colour="info.main"
           />
         </Grid>
 
-        {/* Recent Audit Events */}
-        <Grid item xs={12} sm={6} md={3}>
+        {/* Pending Approvals — warning when > 0 */}
+        <Grid item xs={12} sm={6} md={4} lg={3}>
           <StatCard
-            label="Recent Audit Events"
-            value={data?.recentAuditEventCount ?? '—'}
-            icon={<HistoryIcon fontSize="large" />}
-            colour="text.secondary"
-            onClick={() => navigate('/admin/audit')}
+            label="Pending Approvals"
+            value={pendingApprovals}
+            icon={<PendingActionsIcon fontSize="large" />}
+            warning={pendingApprovals > 0}
+            onClick={() => navigate('/approvals')}
+          />
+        </Grid>
+
+        {/* System Leave Utilization % */}
+        <Grid item xs={12} sm={6} md={4} lg={3}>
+          <StatCard
+            label="System Utilization"
+            value={`${utilPct.toFixed(1)}%`}
+            icon={<BarChartIcon fontSize="large" />}
+            colour="success.main"
           />
         </Grid>
       </Grid>

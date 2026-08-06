@@ -9,80 +9,96 @@ interface ApiEnvelope<T> {
 }
 
 // ---------------------------------------------------------------------------
-// Shared sub-types (mirror C# records, camelCase per ASP.NET Core defaults)
+// Shared sub-types — mirror C# records (camelCase per ASP.NET Core defaults)
 // ---------------------------------------------------------------------------
 
+/** Mirrors LMS.Application.DTOs.Reporting.LeaveBalanceSummary */
 export interface LeaveBalanceSummary {
   leaveTypeName: string;
-  totalDays: number;
-  usedDays: number;
-  remainingDays: number;
+  allocated: number;
+  used: number;
+  available: number;
 }
 
-/** DateOnly fields arrive as 'YYYY-MM-DD' strings. */
+/** Mirrors LMS.Application.DTOs.Reporting.RecentLeaveRequestSummary */
 export interface RecentLeaveRequestSummary {
-  requestId: string;
+  id: string;
   leaveTypeName: string;
+  /** DateOnly serialised as 'YYYY-MM-DD' */
   startDate: string;
   endDate: string;
   status: string;
 }
 
+/** Mirrors LMS.Application.DTOs.Reporting.DeptUtilizationRow */
 export interface DeptUtilizationRow {
-  departmentName: string;
+  deptName: string;
+  totalEmployees: number;
   totalLeaveDays: number;
-  averageLeaveDays: number;
+  avgLeaveDaysPerEmployee: number;
 }
 
+/** Mirrors LMS.Application.DTOs.Reporting.UtilizationReportDto */
 export interface UtilizationReportDto {
+  year: number;
+  departmentId: string | null;
   rows: DeptUtilizationRow[];
 }
 
+/** Mirrors LMS.Application.DTOs.Reporting.ComplianceReportDto */
 export interface ComplianceReportDto {
+  submissionRatePercent: number;
   totalEmployees: number;
-  employeesWithRequests: number;
-  complianceRate: number;
+  employeesWithAtLeastOneRequest: number;
 }
 
+/** Mirrors LMS.Application.DTOs.Reporting.MonthTrendRow */
 export interface MonthTrendRow {
-  year: number;
-  month: number;
-  monthLabel: string;
+  /** 'YYYY-MM' string e.g. '2025-01' */
+  yearMonth: string;
+  totalRequests: number;
   approvedCount: number;
   rejectedCount: number;
 }
 
+/** Mirrors LMS.Application.DTOs.Reporting.TrendsReportDto */
 export interface TrendsReportDto {
+  months: number;
   rows: MonthTrendRow[];
 }
 
 // ---------------------------------------------------------------------------
-// Dashboard DTOs (one per role)
+// Dashboard DTOs (one per role) — mirror C# records exactly
 // ---------------------------------------------------------------------------
 
+/** GET /api/v1/dashboard/employee */
 export interface EmployeeDashboardDto {
   balances: LeaveBalanceSummary[];
   recentRequests: RecentLeaveRequestSummary[];
+  pendingCount: number;
 }
 
+/** GET /api/v1/dashboard/manager */
 export interface ManagerDashboardDto {
-  pendingApprovals: number;
-  teamRecentRequests: RecentLeaveRequestSummary[];
-  teamUtilization: DeptUtilizationRow[];
+  teamPendingRequests: RecentLeaveRequestSummary[];
+  teamSize: number;
 }
 
+/** GET /api/v1/dashboard/hr */
 export interface HrDashboardDto {
+  pendingApprovals: number;
   totalEmployees: number;
-  totalPendingApprovals: number;
-  utilization: UtilizationReportDto;
-  compliance: ComplianceReportDto;
+  activeLeaveToday: number;
+  recentActivity: RecentLeaveRequestSummary[];
 }
 
+/** GET /api/v1/dashboard/super-admin */
 export interface SuperAdminDashboardDto {
   totalEmployees: number;
   totalDepartments: number;
-  lockedAccountCount: number;
-  recentAuditEventCount: number;
+  activeLeaveToday: number;
+  pendingApprovals: number;
+  systemLeaveUtilizationPercent: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -110,14 +126,24 @@ export const dashboardApi = {
       .get<ApiEnvelope<SuperAdminDashboardDto>>('/api/v1/dashboard/super-admin')
       .then(r => r.data.data),
 
+  getUtilization: (): Promise<UtilizationReportDto> =>
+    apiClient
+      .get<ApiEnvelope<UtilizationReportDto>>('/api/v1/reports/utilization')
+      .then(r => r.data.data),
+
+  getCompliance: (): Promise<ComplianceReportDto> =>
+    apiClient
+      .get<ApiEnvelope<ComplianceReportDto>>('/api/v1/reports/compliance')
+      .then(r => r.data.data),
+
   getTrends: (): Promise<TrendsReportDto> =>
     apiClient
       .get<ApiEnvelope<TrendsReportDto>>('/api/v1/reports/trends')
       .then(r => r.data.data),
 
   /**
-   * Streaming CSV — responseType blob, caller creates a Blob URL and triggers
-   * a synthetic <a> click. The axios interceptor still attaches the Bearer token.
+   * Streaming CSV — responseType blob. Caller creates a Blob URL and triggers
+   * a synthetic <a> click.
    */
   exportCsv: () =>
     apiClient.get('/api/v1/reports/export', { responseType: 'blob' }),

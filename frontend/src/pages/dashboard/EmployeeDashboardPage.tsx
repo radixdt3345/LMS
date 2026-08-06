@@ -81,11 +81,12 @@ export default function EmployeeDashboardPage() {
   const balances = data?.balances ?? [];
   const recentRequests = data?.recentRequests ?? [];
 
+  // Doughnut: allocation per leave type
   const doughnutData = {
     labels: balances.map(b => b.leaveTypeName),
     datasets: [
       {
-        data: balances.map(b => b.totalDays),
+        data: balances.map(b => b.allocated),
         backgroundColor: CHART_PALETTE.slice(0, balances.length),
         borderWidth: 1,
       },
@@ -124,17 +125,17 @@ export default function EmployeeDashboardPage() {
                     {balance.leaveTypeName}
                   </Typography>
                   <Chip
-                    label={`${balance.remainingDays} remaining`}
-                    color={balance.remainingDays > 0 ? 'success' : 'default'}
+                    label={`${balance.available} remaining`}
+                    color={balance.available > 0 ? 'success' : 'default'}
                     size="small"
                   />
                 </Box>
                 <LinearProgress
                   variant="determinate"
                   value={
-                    balance.totalDays > 0
+                    balance.allocated > 0
                       ? Math.min(
-                          (balance.usedDays / balance.totalDays) * 100,
+                          (balance.used / balance.allocated) * 100,
                           100,
                         )
                       : 0
@@ -151,10 +152,10 @@ export default function EmployeeDashboardPage() {
                 />
                 <Box display="flex" justifyContent="space-between" mt={0.5}>
                   <Typography variant="caption" color="text.secondary">
-                    {balance.usedDays} used
+                    {balance.used} used
                   </Typography>
                   <Typography variant="caption" color="text.secondary">
-                    {balance.totalDays} total
+                    {balance.allocated} allocated
                   </Typography>
                 </Box>
               </CardContent>
@@ -205,7 +206,7 @@ export default function EmployeeDashboardPage() {
                     </TableHead>
                     <TableBody>
                       {recentRequests.map(req => (
-                        <TableRow key={req.requestId}>
+                        <TableRow key={req.id}>
                           <TableCell>{req.leaveTypeName}</TableCell>
                           <TableCell>{req.startDate}</TableCell>
                           <TableCell>{req.endDate}</TableCell>

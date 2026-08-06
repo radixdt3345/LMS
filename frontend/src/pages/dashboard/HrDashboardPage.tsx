@@ -2,13 +2,9 @@
  * REPORTING-UI-003 / Issue #59 — HR Admin Dashboard
  *
  * Shows:
- * - Stats row: TotalEmployees + TotalPendingApprovals.
+ * - Stats row: TotalEmployees, PendingApprovals, ActiveLeaveToday.
  * - "Export CSV" button (streaming blob download via /reports/export).
- * - Tabs: Utilization | Trends | Compliance.
- *   Utilization tab: Bar chart of dept leave days.
- *   Trends tab:      Bar chart of monthly approved vs rejected counts
- *                    (fetched directly — no Redux slice needed for this view).
- *   Compliance tab:  CircularProgress gauge + employee coverage text.
+ * - Tabs: Recent Activity | Utilization | Trends | Compliance.
  */
 import { useEffect, useState, type SyntheticEvent } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
@@ -18,9 +14,17 @@ import {
   Button,
   Card,
   CardContent,
+  Chip,
   CircularProgress,
   Grid,
+  Paper,
   Tab,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
   Tabs,
   Typography,
 } from '@mui/material';
@@ -36,17 +40,32 @@ import {
 import { Bar } from 'react-chartjs-2';
 import { fetchHrDashboard } from '../../store/slices/dashboardSlice';
 import { dashboardApi } from '../../api/dashboardApi';
-import type { TrendsReportDto } from '../../api/dashboardApi';
+import type {
+  TrendsReportDto,
+  UtilizationReportDto,
+  ComplianceReportDto,
+} from '../../api/dashboardApi';
 import type { RootState, AppDispatch } from '../../store';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend);
 
+const STATUS_COLOUR_MAP: Record<
+  string,
+  'success' | 'warning' | 'error' | 'default' | 'info'
+> = {
+  Approved: 'success',
+  Pending: 'warning',
+  Rejected: 'error',
+  Cancelled: 'default',
+  Draft: 'info',
+  Revoked: 'default',
+};
+
 // ---------------------------------------------------------------------------
 // Compliance gauge
 // ---------------------------------------------------------------------------
-
 interface ComplianceGaugeProps {
-  rate: number;          // 0–100
+  rate: number;
   withRequests: number;
   totalEmployees: number;
 }
@@ -56,7 +75,6 @@ function ComplianceGauge({ rate, withRequests, totalEmployees }: ComplianceGauge
   return (
     <Box display="flex" flexDirection="column" alignItems="center" gap={2}>
       <Box position="relative" display="inline-flex">
-        {/* Track */}
         <CircularProgress
           variant="determinate"
           value={100}
@@ -64,7 +82,6 @@ function ComplianceGauge({ rate, withRequests, totalEmployees }: ComplianceGauge
           thickness={6}
           sx={{ color: 'grey.200', position: 'absolute', top: 0, left: 0 }}
         />
-        {/* Fill */}
         <CircularProgress
           variant="determinate"
           value={Math.min(rate, 100)}
@@ -105,29 +122,53 @@ export default function HrDashboardPage() {
   );
 
   const [activeTab, setActiveTab] = useState(0);
+
+  // Separate lazy-loaded report data
+  const [utilization, setUtilization] = useState<UtilizationReportDto | null>(null);
+  const [utilizationLoading, setUtilizationLoading] = useState(false);
+  const [utilizationError, setUtilizationError] = useState<string | null>(null);
+
   const [trends, setTrends] = useState<TrendsReportDto | null>(null);
   const [trendsLoading, setTrendsLoading] = useState(false);
   const [trendsError, setTrendsError] = useState<string | null>(null);
+
+  const [compliance, setCompliance] = useState<ComplianceReportDto | null>(null);
+  const [complianceLoading, setComplianceLoading] = useState(false);
+  const [complianceError, setComplianceError] = useState<string | null>(null);
+
   const [exportError, setExportError] = useState<string | null>(null);
 
   useEffect(() => {
     dispatch(fetchHrDashboard());
   }, [dispatch]);
 
-  // Lazy-load trends when that tab is first activated
+  // Lazy-load tab data on first activation
   useEffect(() => {
-    if (activeTab !== 1 || trends !== null || trendsLoading) return;
-    setTrendsLoading(true);
-    dashboardApi
-      .getTrends()
-      .then(setTrends)
-      .catch((err: unknown) => {
-        setTrendsError(
-          err instanceof Error ? err.message : 'Failed to load trends.',
-        );
-      })
-      .finally(() => setTrendsLoading(false));
-  }, [activeTab, trends, trendsLoading]);
+    if (activeTab === 1 && utilization === null && !utilizationLoading) {
+      setUtilizationLoading(true);
+      dashboardApi
+        .getUtilization()
+        .then(setUtilization)
+        .catch(() => setUtilizationError('Failed to load utilization data.'))
+        .finally(() => setUtilizationLoading(false));
+    }
+    if (activeTab === 2 && trends === null && !trendsLoading) {
+      setTrendsLoading(true);
+      dashboardApi
+        .getTrends()
+        .then(setTrends)
+        .catch(() => setTrendsError('Failed to load trends data.'))
+        .finally(() => setTrendsLoading(false));
+    }
+    if (activeTab === 3 && compliance === null && !complianceLoading) {
+      setComplianceLoading(true);
+      dashboardApi
+        .getCompliance()
+        .then(setCompliance)
+        .catch(() => setComplianceError('Failed to load compliance data.'))
+        .finally(() => setComplianceLoading(false));
+    }
+  }, [activeTab, utilization, utilizationLoading, trends, trendsLoading, compliance, complianceLoading]);
 
   const handleTabChange = (_: SyntheticEvent, newValue: number) => {
     setActiveTab(newValue);
@@ -146,10 +187,8 @@ export default function HrDashboardPage() {
       anchor.click();
       document.body.removeChild(anchor);
       URL.revokeObjectURL(url);
-    } catch (err: unknown) {
-      setExportError(
-        err instanceof Error ? err.message : 'Export failed. Please try again.',
-      );
+    } catch {
+      setExportError('Export failed. Please try again.');
     }
   };
 
@@ -162,9 +201,9 @@ export default function HrDashboardPage() {
   }
 
   // Utilization bar
-  const utilRows = data?.utilization?.rows ?? [];
+  const utilRows = utilization?.rows ?? [];
   const utilizationBarData = {
-    labels: utilRows.map(r => r.departmentName),
+    labels: utilRows.map(r => r.deptName),
     datasets: [
       {
         label: 'Total Leave Days',
@@ -178,7 +217,7 @@ export default function HrDashboardPage() {
   // Trends bar
   const trendRows = trends?.rows ?? [];
   const trendsBarData = {
-    labels: trendRows.map(r => r.monthLabel),
+    labels: trendRows.map(r => r.yearMonth),
     datasets: [
       {
         label: 'Approved',
@@ -195,7 +234,7 @@ export default function HrDashboardPage() {
     ],
   };
 
-  const compliance = data?.compliance;
+  const recentActivity = data?.recentActivity ?? [];
 
   return (
     <Box p={4}>
@@ -232,10 +271,22 @@ export default function HrDashboardPage() {
           <Card variant="outlined">
             <CardContent sx={{ textAlign: 'center' }}>
               <Typography variant="h3" fontWeight={700} color="warning.main">
-                {data?.totalPendingApprovals ?? '—'}
+                {data?.pendingApprovals ?? '—'}
               </Typography>
               <Typography variant="subtitle2" color="text.secondary" mt={0.5}>
                 Pending Approvals
+              </Typography>
+            </CardContent>
+          </Card>
+        </Grid>
+        <Grid item xs={12} sm={6} md={3}>
+          <Card variant="outlined">
+            <CardContent sx={{ textAlign: 'center' }}>
+              <Typography variant="h3" fontWeight={700} color="info.main">
+                {data?.activeLeaveToday ?? '—'}
+              </Typography>
+              <Typography variant="subtitle2" color="text.secondary" mt={0.5}>
+                On Leave Today
               </Typography>
             </CardContent>
           </Card>
@@ -246,29 +297,70 @@ export default function HrDashboardPage() {
       <Card variant="outlined">
         <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
           <Tabs value={activeTab} onChange={handleTabChange} aria-label="HR dashboard views">
+            <Tab label="Recent Activity" />
             <Tab label="Utilization" />
             <Tab label="Trends" />
             <Tab label="Compliance" />
           </Tabs>
         </Box>
 
-        {/* Utilization tab */}
+        {/* Recent Activity tab */}
         {activeTab === 0 && (
           <CardContent>
-            <Typography variant="h6" mb={2}>
-              Department Leave Utilization
-            </Typography>
-            {utilRows.length === 0 ? (
-              <Typography color="text.secondary">No utilization data available.</Typography>
+            <Typography variant="h6" mb={2}>Recent Leave Activity</Typography>
+            {recentActivity.length === 0 ? (
+              <Typography color="text.secondary">No recent activity.</Typography>
             ) : (
+              <TableContainer component={Paper} elevation={0}>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Leave Type</TableCell>
+                      <TableCell>Start Date</TableCell>
+                      <TableCell>End Date</TableCell>
+                      <TableCell>Status</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {recentActivity.map(req => (
+                      <TableRow key={req.id}>
+                        <TableCell>{req.leaveTypeName}</TableCell>
+                        <TableCell>{req.startDate}</TableCell>
+                        <TableCell>{req.endDate}</TableCell>
+                        <TableCell>
+                          <Chip
+                            label={req.status}
+                            color={STATUS_COLOUR_MAP[req.status] ?? 'default'}
+                            size="small"
+                          />
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            )}
+          </CardContent>
+        )}
+
+        {/* Utilization tab */}
+        {activeTab === 1 && (
+          <CardContent>
+            <Typography variant="h6" mb={2}>Department Leave Utilization</Typography>
+            {utilizationLoading && (
+              <Box display="flex" justifyContent="center" py={4}><CircularProgress /></Box>
+            )}
+            {utilizationError && <Alert severity="error">{utilizationError}</Alert>}
+            {!utilizationLoading && !utilizationError && utilRows.length === 0 && (
+              <Typography color="text.secondary">No utilization data available.</Typography>
+            )}
+            {!utilizationLoading && utilRows.length > 0 && (
               <Bar
                 data={utilizationBarData}
                 options={{
                   responsive: true,
                   plugins: { legend: { display: false } },
-                  scales: {
-                    y: { beginAtZero: true, title: { display: true, text: 'Days' } },
-                  },
+                  scales: { y: { beginAtZero: true, title: { display: true, text: 'Days' } } },
                 }}
               />
             )}
@@ -276,19 +368,13 @@ export default function HrDashboardPage() {
         )}
 
         {/* Trends tab */}
-        {activeTab === 1 && (
+        {activeTab === 2 && (
           <CardContent>
-            <Typography variant="h6" mb={2}>
-              Monthly Leave Trends
-            </Typography>
+            <Typography variant="h6" mb={2}>Monthly Leave Trends</Typography>
             {trendsLoading && (
-              <Box display="flex" justifyContent="center" py={4}>
-                <CircularProgress />
-              </Box>
+              <Box display="flex" justifyContent="center" py={4}><CircularProgress /></Box>
             )}
-            {trendsError && (
-              <Alert severity="error">{trendsError}</Alert>
-            )}
+            {trendsError && <Alert severity="error">{trendsError}</Alert>}
             {!trendsLoading && !trendsError && trendRows.length === 0 && (
               <Typography color="text.secondary">No trend data available.</Typography>
             )}
@@ -298,9 +384,7 @@ export default function HrDashboardPage() {
                 options={{
                   responsive: true,
                   plugins: { legend: { position: 'top' } },
-                  scales: {
-                    y: { beginAtZero: true, title: { display: true, text: 'Requests' } },
-                  },
+                  scales: { y: { beginAtZero: true, title: { display: true, text: 'Requests' } } },
                 }}
               />
             )}
@@ -308,20 +392,23 @@ export default function HrDashboardPage() {
         )}
 
         {/* Compliance tab */}
-        {activeTab === 2 && (
+        {activeTab === 3 && (
           <CardContent>
-            <Typography variant="h6" mb={3}>
-              Leave Submission Compliance
-            </Typography>
-            {compliance != null ? (
+            <Typography variant="h6" mb={3}>Leave Submission Compliance</Typography>
+            {complianceLoading && (
+              <Box display="flex" justifyContent="center" py={4}><CircularProgress /></Box>
+            )}
+            {complianceError && <Alert severity="error">{complianceError}</Alert>}
+            {!complianceLoading && compliance != null && (
               <Box display="flex" justifyContent="center">
                 <ComplianceGauge
-                  rate={compliance.complianceRate}
-                  withRequests={compliance.employeesWithRequests}
+                  rate={compliance.submissionRatePercent}
+                  withRequests={compliance.employeesWithAtLeastOneRequest}
                   totalEmployees={compliance.totalEmployees}
                 />
               </Box>
-            ) : (
+            )}
+            {!complianceLoading && !complianceError && compliance == null && (
               <Typography color="text.secondary">No compliance data available.</Typography>
             )}
           </CardContent>
