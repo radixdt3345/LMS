@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { apiClient } from '../../api/axiosClient';
 import {
   Alert,
   Box,
@@ -153,8 +154,23 @@ export default function AllLeavesPage() {
   // CSV export
   // -------------------------------------------------------------------------
 
-  const handleExportCsv = () => {
-    window.open('/api/v1/leave-requests/export', '_blank', 'noopener,noreferrer');
+  const handleExportCsv = async () => {
+    try {
+      const response = await apiClient.get('/api/v1/reports/export', {
+        responseType: 'blob',
+      });
+      const blob = new Blob([response.data as BlobPart], { type: 'text/csv' });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `leave-report-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      URL.revokeObjectURL(url);
+    } catch {
+      setSnackbar({ message: 'CSV export failed. Please try again.', severity: 'error' });
+    }
   };
 
   // -------------------------------------------------------------------------
@@ -169,7 +185,7 @@ export default function AllLeavesPage() {
         </Typography>
         <Button
           variant="outlined"
-          onClick={handleExportCsv}
+          onClick={() => { void handleExportCsv(); }}
           data-testid="export-csv-button"
         >
           Export CSV
