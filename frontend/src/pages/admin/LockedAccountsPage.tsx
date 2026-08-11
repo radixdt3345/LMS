@@ -1,9 +1,24 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-  Alert, Box, Button, CircularProgress, Paper, Snackbar, Table, TableBody, TableCell,
-  TableContainer, TableHead, TableRow, Typography,
+  Alert,
+  Box,
+  Button,
+  CircularProgress,
+  Paper,
+  Snackbar,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Typography,
 } from '@mui/material';
-import { fetchLockedAccounts, unlockAccount, type LockedAccount } from '../../api/adminApi';
+import {
+  fetchLockedAccounts,
+  unlockAccount,
+  type LockedAccount,
+} from '../../api/adminApi';
 
 function formatTimestamp(iso: string | null): string {
   if (!iso) return '—';
@@ -18,50 +33,85 @@ export default function LockedAccountsPage() {
   const [unlockingId, setUnlockingId] = useState<string | null>(null);
 
   const loadAccounts = useCallback(async () => {
-    setLoading(true); setFetchError(null);
-    try { const result = await fetchLockedAccounts(); setAccounts(result.items); }
-    catch { setFetchError('Failed to load locked accounts. Please try again.'); }
-    finally { setLoading(false); }
+    setLoading(true);
+    setFetchError(null);
+    try {
+      const result = await fetchLockedAccounts();
+      setAccounts(result.items);
+    } catch {
+      setFetchError('Failed to load locked accounts. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => { void loadAccounts(); }, [loadAccounts]);
 
   const handleUnlock = async (id: string) => {
-    setAccounts(prev => prev.filter(a => a.id !== id)); setUnlockingId(id);
-    try { await unlockAccount(id); }
-    catch { setSnackbarMessage('Failed to unlock account. Please try again.'); void loadAccounts(); }
-    finally { setUnlockingId(null); }
+    setAccounts((prev) => prev.filter((a) => a.id !== id));
+    setUnlockingId(id);
+    try {
+      await unlockAccount(id);
+    } catch {
+      setSnackbarMessage('Failed to unlock account. Please try again.');
+      void loadAccounts();
+    } finally {
+      setUnlockingId(null);
+    }
   };
 
   return (
     <Box p={4}>
       <Typography variant="h5" fontWeight={600} mb={3}>Locked Accounts</Typography>
+
       {loading && <Box display="flex" justifyContent="center" mt={6}><CircularProgress /></Box>}
       {!loading && fetchError && <Alert severity="error" sx={{ mb: 2 }}>{fetchError}</Alert>}
-      {!loading && !fetchError && accounts.length === 0 && <Box display="flex" alignItems="center" justifyContent="center" mt={6} data-testid="empty-state"><Typography color="text.secondary">No locked accounts</Typography></Box>}
+      {!loading && !fetchError && accounts.length === 0 && (
+        <Box display="flex" alignItems="center" justifyContent="center" mt={6} data-testid="empty-state">
+          <Typography color="text.secondary" variant="body1">No locked accounts</Typography>
+        </Box>
+      )}
+
       {!loading && !fetchError && accounts.length > 0 && (
         <TableContainer component={Paper} elevation={2}>
-          <Table data-testid="accounts-table">
-            <TableHead><TableRow>
-              <TableCell><strong>Name</strong></TableCell>
-              <TableCell><strong>Email</strong></TableCell>
-              <TableCell><strong>Locked Since</strong></TableCell>
-              <TableCell align="center"><strong>Failed Attempts</strong></TableCell>
-              <TableCell align="center"><strong>Actions</strong></TableCell>
-            </TableRow></TableHead>
-            <TableBody>{accounts.map(account => (
-              <TableRow key={account.id} data-testid={`row-${account.id}`}>
-                <TableCell>{account.firstName} {account.lastName}</TableCell>
-                <TableCell>{account.email}</TableCell>
-                <TableCell>{formatTimestamp(account.lockoutUntil)}</TableCell>
-                <TableCell align="center">{account.failedLoginCount}</TableCell>
-                <TableCell align="center"><Button variant="outlined" size="small" color="primary" disabled={unlockingId === account.id} onClick={() => void handleUnlock(account.id)} data-testid={`unlock-btn-${account.id}`}>Unlock</Button></TableCell>
+          <Table aria-label="locked accounts table" data-testid="accounts-table">
+            <TableHead>
+              <TableRow>
+                <TableCell><strong>Name</strong></TableCell>
+                <TableCell><strong>Email</strong></TableCell>
+                <TableCell><strong>Locked Since</strong></TableCell>
+                <TableCell align="center"><strong>Failed Attempts</strong></TableCell>
+                <TableCell align="center"><strong>Actions</strong></TableCell>
               </TableRow>
-            ))}</TableBody>
+            </TableHead>
+            <TableBody>
+              {accounts.map((account) => (
+                <TableRow key={account.id} data-testid={`row-${account.id}`}>
+                  <TableCell>{account.firstName} {account.lastName}</TableCell>
+                  <TableCell>{account.email}</TableCell>
+                  <TableCell>{formatTimestamp(account.lockoutUntil)}</TableCell>
+                  <TableCell align="center">{account.failedLoginCount}</TableCell>
+                  <TableCell align="center">
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      color="primary"
+                      disabled={unlockingId === account.id}
+                      onClick={() => void handleUnlock(account.id)}
+                      data-testid={`unlock-btn-${account.id}`}
+                    >
+                      Unlock
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
           </Table>
         </TableContainer>
       )}
-      <Snackbar open={snackbarMessage !== null} autoHideDuration={5000} onClose={() => setSnackbarMessage(null)} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
+
+      <Snackbar open={snackbarMessage !== null} autoHideDuration={5000}
+        onClose={() => setSnackbarMessage(null)} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
         <Alert onClose={() => setSnackbarMessage(null)} severity="error" sx={{ width: '100%' }}>{snackbarMessage}</Alert>
       </Snackbar>
     </Box>
