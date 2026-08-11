@@ -13,15 +13,9 @@ using BC = BCrypt.Net.BCrypt;
 
 namespace LMS.Tests.Unit.Auth;
 
-/// <summary>
-/// Unit tests for AuthService — local login, lockout, credential validation.
-/// Uses EF Core InMemory provider; no PostgreSQL required.
-/// </summary>
 [Trait("Category", "Unit")]
 public class AuthServiceTests
 {
-    // ── Helpers ──────────────────────────────────────────────────────────────
-
     private static LmsDbContext CreateInMemoryDb()
     {
         var options = new DbContextOptionsBuilder<LmsDbContext>()
@@ -55,10 +49,9 @@ public class AuthServiceTests
     private static AuthService BuildService(LmsDbContext db, ITokenService? tokenSvc = null)
     {
         tokenSvc ??= new Mock<ITokenService>().Object;
-        return new AuthService(db, tokenSvc, DefaultJwtOptions());
+        var msalProvider = new Mock<IMsalAuthProvider>().Object;
+        return new AuthService(db, tokenSvc, DefaultJwtOptions(), msalProvider);
     }
-
-    // ── UT-1: valid credentials → success + tokens ───────────────────────────
 
     [Fact]
     public async Task LoginAsync_ValidCredentials_ReturnsSuccess()
@@ -74,7 +67,7 @@ public class AuthServiceTests
         db.Users.Add(user);
         await db.SaveChangesAsync();
 
-        var svc = new AuthService(db, tokenSvc.Object, DefaultJwtOptions());
+        var svc = new AuthService(db, tokenSvc.Object, DefaultJwtOptions(), new Mock<IMsalAuthProvider>().Object);
         var result = await svc.LoginAsync(new LoginRequestDto
         {
             Email = "valid@example.com",
@@ -87,8 +80,6 @@ public class AuthServiceTests
         Assert.Equal("refresh-raw-token", result.Value.RefreshToken);
         Assert.Equal(15 * 60, result.Value.ExpiresIn);
     }
-
-    // ── UT-2: wrong password → 401 ───────────────────────────────────────────
 
     [Fact]
     public async Task LoginAsync_InvalidPassword_Returns401()
@@ -109,8 +100,6 @@ public class AuthServiceTests
         Assert.Equal(401, result.StatusCode);
     }
 
-    // ── UT-3: unknown email → 401 ─────────────────────────────────────────────
-
     [Fact]
     public async Task LoginAsync_UnknownEmail_Returns401()
     {
@@ -125,8 +114,6 @@ public class AuthServiceTests
         Assert.False(result.IsSuccess);
         Assert.Equal(401, result.StatusCode);
     }
-
-    // ── UT-4 (covers FR-7): 5 consecutive failures → lockout applied ──────────
 
     [Fact]
     public async Task LoginAsync_FiveConsecutiveFailures_SetsLockout()
@@ -147,8 +134,6 @@ public class AuthServiceTests
         Assert.True(updated.LockoutUntil > DateTime.UtcNow);
     }
 
-    // ── UT-5: already-locked account → 423 regardless of correct password ─────
-
     [Fact]
     public async Task LoginAsync_LockedAccount_Returns423()
     {
@@ -162,14 +147,12 @@ public class AuthServiceTests
         var result = await BuildService(db).LoginAsync(new LoginRequestDto
         {
             Email = "locked@example.com",
-            Password = "Pass!" // correct password — still locked
+            Password = "Pass!"
         });
 
         Assert.False(result.IsSuccess);
         Assert.Equal(423, result.StatusCode);
     }
-
-    // ── UT-6: inactive user → 401 ─────────────────────────────────────────────
 
     [Fact]
     public async Task LoginAsync_InactiveUser_Returns401()
@@ -191,8 +174,6 @@ public class AuthServiceTests
         Assert.Equal(401, result.StatusCode);
     }
 
-    // ── UT-7: successful login resets failed counter ──────────────────────────
-
     [Fact]
     public async Task LoginAsync_SuccessAfterFailures_ResetsFailedCount()
     {
@@ -207,7 +188,7 @@ public class AuthServiceTests
         db.Users.Add(user);
         await db.SaveChangesAsync();
 
-        var svc = new AuthService(db, tokenSvc.Object, DefaultJwtOptions());
+        var svc = new AuthService(db, tokenSvc.Object, DefaultJwtOptions(), new Mock<IMsalAuthProvider>().Object);
         var result = await svc.LoginAsync(new LoginRequestDto
         {
             Email = "reset@example.com",
