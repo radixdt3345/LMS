@@ -3,10 +3,17 @@ import { Alert, Box, Button, Chip, CircularProgress, Paper, Snackbar, TextField,
 import { useForm, Controller } from 'react-hook-form';
 import { getOwnProfile, updateOwnProfile, type Employee } from '../../api/employeesApi';
 
-type RoleChipColor = 'default' | 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning';
+type RoleChipColor = 'default'|'primary'|'secondary'|'error'|'info'|'success'|'warning';
+
 function roleChipColor(role: string): RoleChipColor {
-  switch (role) { case 'SuperAdmin': return 'error'; case 'HRAdmin': return 'warning'; case 'Manager': return 'primary'; default: return 'default'; }
+  switch (role) {
+    case 'SuperAdmin': return 'error';
+    case 'HRAdmin': return 'warning';
+    case 'Manager': return 'primary';
+    default: return 'default';
+  }
 }
+
 interface ProfileFormValues { firstName: string; lastName: string; phone: string; }
 
 export default function ProfilePage() {
@@ -14,22 +21,31 @@ export default function ProfilePage() {
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [snackbar, setSnackbar] = useState<{ msg: string; severity: 'success' | 'error' } | null>(null);
-  const { control, handleSubmit, reset, formState: { errors } } = useForm<ProfileFormValues>({ defaultValues: { firstName: '', lastName: '', phone: '' } });
+  const [snackbar, setSnackbar] = useState<{ msg: string; severity: 'success'|'error' } | null>(null);
+
+  const { control, handleSubmit, reset, formState: { errors } } = useForm<ProfileFormValues>({
+    defaultValues: { firstName: '', lastName: '', phone: '' },
+  });
 
   useEffect(() => {
     void (async () => {
       setLoading(true); setFetchError(null);
-      try { const data = await getOwnProfile(); setProfile(data); reset({ firstName: data.firstName, lastName: data.lastName, phone: data.phone ?? '' }); }
-      catch { setFetchError('Failed to load profile. Please try again.'); }
+      try {
+        const data = await getOwnProfile();
+        setProfile(data);
+        reset({ firstName: data.firstName, lastName: data.lastName, phone: data.phone ?? '' });
+      } catch { setFetchError('Failed to load profile. Please try again.'); }
       finally { setLoading(false); }
     })();
   }, [reset]);
 
   const onSubmit = async (values: ProfileFormValues) => {
     setSaving(true);
-    try { const updated = await updateOwnProfile({ firstName: values.firstName, lastName: values.lastName, phone: values.phone || null }); setProfile(updated); setSnackbar({ msg: 'Profile updated successfully.', severity: 'success' }); }
-    catch { setSnackbar({ msg: 'Update failed. Please try again.', severity: 'error' }); }
+    try {
+      const updated = await updateOwnProfile({ firstName: values.firstName, lastName: values.lastName, phone: values.phone || null });
+      setProfile(updated);
+      setSnackbar({ msg: 'Profile updated successfully.', severity: 'success' });
+    } catch { setSnackbar({ msg: 'Update failed. Please try again.', severity: 'error' }); }
     finally { setSaving(false); }
   };
 
@@ -53,10 +69,15 @@ export default function ProfilePage() {
       <Paper elevation={2} sx={{ p: 3 }}>
         <Typography variant="h6" mb={2}>Edit Profile</Typography>
         <Box component="form" onSubmit={handleSubmit(onSubmit)} display="flex" flexDirection="column" gap={2}>
-          <Controller name="firstName" control={control} rules={{ required: 'First name is required.' }} render={({ field }) => <TextField {...field} label="First Name" fullWidth error={!!errors.firstName} helperText={errors.firstName?.message} />} />
-          <Controller name="lastName" control={control} rules={{ required: 'Last name is required.' }} render={({ field }) => <TextField {...field} label="Last Name" fullWidth error={!!errors.lastName} helperText={errors.lastName?.message} />} />
-          <Controller name="phone" control={control} render={({ field }) => <TextField {...field} label="Phone (optional)" fullWidth />} />
-          <Box display="flex" justifyContent="flex-end"><Button type="submit" variant="contained" disabled={saving}>{saving ? 'Saving…' : 'Save Changes'}</Button></Box>
+          <Controller name="firstName" control={control} rules={{ required: 'First name is required.' }}
+            render={({ field }) => <TextField {...field} label="First Name" fullWidth error={!!errors.firstName} helperText={errors.firstName?.message} />} />
+          <Controller name="lastName" control={control} rules={{ required: 'Last name is required.' }}
+            render={({ field }) => <TextField {...field} label="Last Name" fullWidth error={!!errors.lastName} helperText={errors.lastName?.message} />} />
+          <Controller name="phone" control={control}
+            render={({ field }) => <TextField {...field} label="Phone (optional)" fullWidth />} />
+          <Box display="flex" justifyContent="flex-end">
+            <Button type="submit" variant="contained" disabled={saving}>{saving ? 'Saving…' : 'Save Changes'}</Button>
+          </Box>
         </Box>
       </Paper>
       <Snackbar open={snackbar !== null} autoHideDuration={5000} onClose={() => setSnackbar(null)} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>

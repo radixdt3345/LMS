@@ -1,10 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Alert, Box, Button, Chip, CircularProgress, FormControl, FormControlLabel, FormHelperText,
-  InputLabel, MenuItem, Paper, Select, type SelectChangeEvent, Snackbar, Switch, TextField, Typography,
+  Alert, Box, Button, Chip, CircularProgress, FormControl, FormControlLabel,
+  FormHelperText, InputLabel, MenuItem, Paper, Select, type SelectChangeEvent,
+  Snackbar, Switch, TextField, Typography,
 } from '@mui/material';
-import { getLeaveTypes, createLeaveRequest, submitLeaveRequest, previewLeaveDays, type LeaveTypeDto } from '../../api/leaveRequestsApi';
+import {
+  getLeaveTypes, createLeaveRequest, submitLeaveRequest, previewLeaveDays, type LeaveTypeDto,
+} from '../../api/leaveRequestsApi';
 
 export default function NewLeavePage() {
   const navigate = useNavigate();
@@ -23,22 +26,30 @@ export default function NewLeavePage() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [snackbar, setSnackbar] = useState<string | null>(null);
-  const selectedLeaveType = leaveTypes.find(lt => lt.id === leaveTypeId);
+
+  const selectedLeaveType = leaveTypes.find((lt) => lt.id === leaveTypeId);
   const requiresDocument = selectedLeaveType?.requiresDocument ?? false;
   const isSingleDay = !!startDate && startDate === endDate;
 
   useEffect(() => {
     let cancelled = false;
-    setLeaveTypesLoading(true); setLeaveTypesError(null);
-    getLeaveTypes().then(types => { if (!cancelled) setLeaveTypes(types); }).catch(() => { if (!cancelled) setLeaveTypesError('Failed to load leave types. Please refresh.'); }).finally(() => { if (!cancelled) setLeaveTypesLoading(false); });
+    setLeaveTypesLoading(true);
+    getLeaveTypes()
+      .then((types) => { if (!cancelled) setLeaveTypes(types); })
+      .catch(() => { if (!cancelled) setLeaveTypesError('Failed to load leave types. Please refresh.'); })
+      .finally(() => { if (!cancelled) setLeaveTypesLoading(false); });
     return () => { cancelled = true; };
   }, []);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const fetchPreview = useCallback((start: string, end: string, typeId: string) => {
     if (!start || !end || !typeId || start > end) { setComputedDays(null); return; }
     setPreviewLoading(true);
-    previewLeaveDays(start, end, typeId).then(res => { setComputedDays(res.computed_days); }).catch(() => { setComputedDays(null); }).finally(() => { setPreviewLoading(false); });
+    previewLeaveDays(start, end, typeId)
+      .then((res) => setComputedDays(res.computed_days))
+      .catch(() => setComputedDays(null))
+      .finally(() => setPreviewLoading(false));
   }, []);
 
   useEffect(() => {
@@ -63,11 +74,16 @@ export default function NewLeavePage() {
     if (!validate()) return;
     setSubmitting(true); setSubmitError(null);
     try {
-      const draft = await createLeaveRequest({ leaveTypeId, startDate, endDate, reason: reason.trim(), documentUrl: requiresDocument && documentUrl.trim() ? documentUrl.trim() : null, isHalfDay: isSingleDay && isHalfDay });
+      const draft = await createLeaveRequest({
+        leaveTypeId, startDate, endDate, reason: reason.trim(),
+        documentUrl: requiresDocument && documentUrl.trim() ? documentUrl.trim() : null,
+        isHalfDay: isSingleDay && isHalfDay,
+      });
       await submitLeaveRequest(draft.id);
       navigate('/leaves/history');
-    } catch { setSubmitError('Failed to submit leave request. Please try again.'); }
-    finally { setSubmitting(false); }
+    } catch {
+      setSubmitError('Failed to submit leave request. Please try again.');
+    } finally { setSubmitting(false); }
   };
 
   return (
@@ -77,31 +93,56 @@ export default function NewLeavePage() {
       {submitError && <Alert severity="error" sx={{ mb: 2 }}>{submitError}</Alert>}
       <Paper elevation={2} sx={{ p: 3 }}>
         <Box display="flex" gap={2} mb={2}>
-          <TextField label="Start Date" type="date" fullWidth InputLabelProps={{ shrink: true }} value={startDate} onChange={e => { setStartDate(e.target.value); setErrors(prev => ({ ...prev, startDate: '' })); }} error={!!errors.startDate} helperText={errors.startDate} inputProps={{ 'data-testid': 'start-date-input' }} />
-          <TextField label="End Date" type="date" fullWidth InputLabelProps={{ shrink: true }} value={endDate} onChange={e => { setEndDate(e.target.value); setErrors(prev => ({ ...prev, endDate: '' })); if (e.target.value !== startDate) setIsHalfDay(false); }} error={!!errors.endDate} helperText={errors.endDate} inputProps={{ 'data-testid': 'end-date-input' }} />
+          <TextField label="Start Date" type="date" fullWidth InputLabelProps={{ shrink: true }} value={startDate}
+            onChange={(e) => { setStartDate(e.target.value); setErrors((prev) => ({ ...prev, startDate: '' })); }}
+            error={!!errors.startDate} helperText={errors.startDate} inputProps={{ 'data-testid': 'start-date-input' }} />
+          <TextField label="End Date" type="date" fullWidth InputLabelProps={{ shrink: true }} value={endDate}
+            onChange={(e) => { setEndDate(e.target.value); setErrors((prev) => ({ ...prev, endDate: '' })); if (e.target.value !== startDate) setIsHalfDay(false); }}
+            error={!!errors.endDate} helperText={errors.endDate} inputProps={{ 'data-testid': 'end-date-input' }} />
         </Box>
         <Box mb={2} display="flex" alignItems="center" gap={2} flexWrap="wrap">
           <Box minHeight={32} display="flex" alignItems="center">
             {previewLoading && <CircularProgress size={16} sx={{ mr: 1 }} />}
-            {!previewLoading && computedDays !== null && <Chip label={`${isHalfDay && isSingleDay ? 0.5 : computedDays} working day${(!isHalfDay || !isSingleDay) && computedDays !== 1 ? 's' : ''}`} color="primary" variant="outlined" size="small" data-testid="computed-days-chip" />}
+            {!previewLoading && computedDays !== null && (
+              <Chip label={`${isHalfDay && isSingleDay ? 0.5 : computedDays} working day${(!isHalfDay || !isSingleDay) && computedDays !== 1 ? 's' : ''}`}
+                color="primary" variant="outlined" size="small" data-testid="computed-days-chip" />
+            )}
           </Box>
-          {isSingleDay && <FormControlLabel control={<Switch checked={isHalfDay} onChange={e => setIsHalfDay(e.target.checked)} inputProps={{ 'aria-label': 'half-day toggle', 'data-testid': 'half-day-switch' } as React.InputHTMLAttributes<HTMLInputElement>} size="small" />} label="Half day (0.5)" />}
+          {isSingleDay && (
+            <FormControlLabel
+              control={<Switch checked={isHalfDay} onChange={(e) => setIsHalfDay(e.target.checked)}
+                inputProps={{ 'aria-label': 'half-day toggle', 'data-testid': 'half-day-switch' } as React.InputHTMLAttributes<HTMLInputElement>} size="small" />}
+              label="Half day (0.5)" />
+          )}
         </Box>
         <FormControl fullWidth sx={{ mb: 2 }} error={!!errors.leaveTypeId} disabled={leaveTypesLoading}>
           <InputLabel id="leave-type-label">Leave Type</InputLabel>
-          <Select labelId="leave-type-label" label="Leave Type" value={leaveTypeId} onChange={(e: SelectChangeEvent) => { setLeaveTypeId(e.target.value); setErrors(prev => ({ ...prev, leaveTypeId: '' })); }} inputProps={{ 'data-testid': 'leave-type-select' }}>
-            {leaveTypes.map(lt => <MenuItem key={lt.id} value={lt.id}>{lt.name}</MenuItem>)}
+          <Select labelId="leave-type-label" label="Leave Type" value={leaveTypeId}
+            onChange={(e: SelectChangeEvent) => { setLeaveTypeId(e.target.value); setErrors((prev) => ({ ...prev, leaveTypeId: '' })); }}
+            inputProps={{ 'data-testid': 'leave-type-select' }}>
+            {leaveTypes.map((lt) => <MenuItem key={lt.id} value={lt.id}>{lt.name}</MenuItem>)}
           </Select>
           {errors.leaveTypeId && <FormHelperText>{errors.leaveTypeId}</FormHelperText>}
         </FormControl>
-        <TextField label="Reason" multiline rows={3} fullWidth sx={{ mb: 2 }} value={reason} onChange={e => { setReason(e.target.value); setErrors(prev => ({ ...prev, reason: '' })); }} error={!!errors.reason} helperText={errors.reason} inputProps={{ 'data-testid': 'reason-textarea' }} />
-        {requiresDocument && <TextField label="Document URL" type="url" fullWidth sx={{ mb: 2 }} value={documentUrl} onChange={e => { setDocumentUrl(e.target.value); setErrors(prev => ({ ...prev, documentUrl: '' })); }} error={!!errors.documentUrl} helperText={errors.documentUrl ?? 'This leave type requires supporting documentation.'} inputProps={{ 'data-testid': 'document-url-input' }} />}
+        <TextField label="Reason" multiline rows={3} fullWidth sx={{ mb: 2 }} value={reason}
+          onChange={(e) => { setReason(e.target.value); setErrors((prev) => ({ ...prev, reason: '' })); }}
+          error={!!errors.reason} helperText={errors.reason} inputProps={{ 'data-testid': 'reason-textarea' }} />
+        {requiresDocument && (
+          <TextField label="Document URL" type="url" fullWidth sx={{ mb: 2 }} value={documentUrl}
+            onChange={(e) => { setDocumentUrl(e.target.value); setErrors((prev) => ({ ...prev, documentUrl: '' })); }}
+            error={!!errors.documentUrl} helperText={errors.documentUrl ?? 'This leave type requires supporting documentation.'}
+            inputProps={{ 'data-testid': 'document-url-input' }} />
+        )}
         <Box display="flex" justifyContent="flex-end" gap={2} mt={1}>
           <Button variant="outlined" onClick={() => navigate('/leaves/history')} disabled={submitting}>Cancel</Button>
-          <Button variant="contained" onClick={() => void handleSubmit()} disabled={submitting || leaveTypesLoading} data-testid="submit-button">{submitting ? <CircularProgress size={20} color="inherit" /> : 'Submit Request'}</Button>
+          <Button variant="contained" onClick={() => void handleSubmit()} disabled={submitting || leaveTypesLoading} data-testid="submit-button">
+            {submitting ? <CircularProgress size={20} color="inherit" /> : 'Submit Request'}
+          </Button>
         </Box>
       </Paper>
-      <Snackbar open={snackbar !== null} autoHideDuration={4000} onClose={() => setSnackbar(null)} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}><Alert onClose={() => setSnackbar(null)} severity="success" sx={{ width: '100%' }}>{snackbar}</Alert></Snackbar>
+      <Snackbar open={snackbar !== null} autoHideDuration={4000} onClose={() => setSnackbar(null)} anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}>
+        <Alert onClose={() => setSnackbar(null)} severity="success" sx={{ width: '100%' }}>{snackbar}</Alert>
+      </Snackbar>
     </Box>
   );
 }
