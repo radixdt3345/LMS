@@ -1,6 +1,8 @@
 using LMS.Application.DTOs.Auth;
 using LMS.Application.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace LMS.API.Controllers;
 
@@ -21,8 +23,10 @@ public class AuthController : ControllerBase
     /// <summary>
     /// POST /api/v1/auth/login — local email/password login.
     /// Returns JWT access token (body only — never written to localStorage) and refresh token.
+    /// Rate-limited to 10 requests/minute per IP (FR-10).
     /// </summary>
     [HttpPost("login")]
+    [EnableRateLimiting("login")]
     public async Task<IActionResult> Login([FromBody] LoginRequestDto dto, CancellationToken ct)
     {
         var result = await _authService.LoginAsync(dto, ct);
@@ -35,5 +39,90 @@ public class AuthController : ControllerBase
             });
 
         return Ok(new { success = true, data = result.Value });
+    }
+
+    /// <summary>
+    /// GET /api/v1/auth/sso/callback?code=&amp;state= — Azure AD SSO callback.
+    /// Exchanges authorization code for JWT + refresh token.
+    /// New users are auto-provisioned as Employee. Existing users found by OID,
+    /// or linked by email when OID not yet set.
+    /// FR-5, FR-6.
+    /// </summary>
+    [HttpGet("sso/callback")]
+    public async Task<IActionResult> SsoCallback([FromQuery] string code, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(code))
+            return BadRequest(new
+            {
+                success = false,
+                error = new { message = "Authorization code is required." }
+            });
+
+        var result = await _authService.SsoCallbackAsync(code, ct);
+
+        if (!result.IsSuccess)
+            return StatusCode(result.StatusCode, new
+            {
+                success = false,
+                error = new { message = result.Error }
+            });
+
+        return Ok(new { success = true, data = result.Value });
+    }
+
+    /// <summary>
+    /// POST /api/v1/auth/refresh — rotates a refresh token.
+    /// Revokes the old token and issues a new JWT + refresh token pair.
+    /// Returns 401 for expired or revoked tokens. FR-8.
+    /// </summary>
+    [HttpPost("refresh")]
+    public async Task<IActionResult> RefreshToken(
+        [FromBody] RefreshTokenRequestDto dto, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(dto.RefreshToken))
+            return BadRequest(new
+            {
+                success = false,
+                error = new { message = "Refresh token is required." }
+            });
+
+        var result = await _authService.RefreshTokenAsync(dto.RefreshToken, ct);
+
+        if (!result.IsSuccess)
+            return StatusCode(result.StatusCode, new
+            {
+                success = false,
+                error = new { message = result.Error }
+            });
+
+        return Ok(new { success = true, data = result.Value });
+    }
+
+    /// <summary>
+    /// POST /api/v1/auth/logout — revokes the caller's refresh token.
+    /// Requires a valid JWT in the Authorization header. FR-9.
+    /// </summary>
+    [HttpPost("logout")]
+    [Authorize]
+    public async Task<IActionResult> Logout(
+        [FromBody] LogoutRequestDto dto, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(dto.RefreshToken))
+            return BadRequest(new
+            {
+                success = false,
+                error = new { message = "Refresh token is required." }
+            });
+
+        var result = await _authService.LogoutAsync(dto.RefreshToken, ct);
+
+        if (!result.IsSuccess)
+            return StatusCode(result.StatusCode, new
+            {
+                success = false,
+                error = new { message = result.Error }
+            });
+
+        return Ok(new { success = true });
     }
 }
