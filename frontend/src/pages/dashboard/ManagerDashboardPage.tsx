@@ -10,7 +10,7 @@ import PendingActionsIcon from '@mui/icons-material/PendingActions';
 import { fetchManagerDashboard } from '../../store/slices/dashboardSlice';
 import type { RootState, AppDispatch } from '../../store';
 
-const STATUS_COLOUR_MAP: Record<string, 'success' | 'warning' | 'error' | 'default' | 'info'> = {
+const STATUS_COLOUR_MAP: Record<string, 'success'|'warning'|'error'|'default'|'info'> = {
   Approved: 'success', Pending: 'warning', Rejected: 'error', Cancelled: 'default', Draft: 'info', Revoked: 'default',
 };
 
@@ -18,6 +18,7 @@ export default function ManagerDashboardPage() {
   const dispatch = useDispatch<AppDispatch>();
   const navigate = useNavigate();
   const { data, loading, error } = useSelector((state: RootState) => state.dashboard.manager);
+
   useEffect(() => { dispatch(fetchManagerDashboard()); }, [dispatch]);
 
   if (loading) return <Box display="flex" justifyContent="center" alignItems="center" minHeight={300}><CircularProgress /></Box>;
@@ -55,7 +56,13 @@ export default function ManagerDashboardPage() {
             {teamPendingRequests.length === 0 ? <Typography color="text.secondary">No pending requests from your team.</Typography> : (
               <TableContainer component={Paper} elevation={0}><Table size="small">
                 <TableHead><TableRow><TableCell>Leave Type</TableCell><TableCell>Start Date</TableCell><TableCell>End Date</TableCell><TableCell>Status</TableCell><TableCell /></TableRow></TableHead>
-                <TableBody>{teamPendingRequests.map(req => (<TableRow key={req.id}><TableCell>{req.leaveTypeName}</TableCell><TableCell>{req.startDate}</TableCell><TableCell>{req.endDate}</TableCell><TableCell><Chip label={req.status} color={STATUS_COLOUR_MAP[req.status] ?? 'default'} size="small" /></TableCell><TableCell><Button size="small" variant="outlined" onClick={() => navigate('/approvals')}>Review</Button></TableCell></TableRow>))}</TableBody>
+                <TableBody>{teamPendingRequests.map(req => (
+                  <TableRow key={req.id}>
+                    <TableCell>{req.leaveTypeName}</TableCell><TableCell>{req.startDate}</TableCell><TableCell>{req.endDate}</TableCell>
+                    <TableCell><Chip label={req.status} color={STATUS_COLOUR_MAP[req.status] ?? 'default'} size="small" /></TableCell>
+                    <TableCell><Button size="small" variant="outlined" onClick={() => navigate('/approvals')}>Review</Button></TableCell>
+                  </TableRow>
+                ))}</TableBody>
               </Table></TableContainer>
             )}
           </CardContent></Card>
